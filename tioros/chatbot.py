@@ -135,7 +135,7 @@ class Chatbot(commands.Bot):
     async def play(self, ctx: commands.Context, *, search: str) -> None:
         #track = await sounds.Sound.ytdl_search(search)
         #self.player.play(track)
-        await ctx.send(f'Now playing: {track.title}')
+        await ctx.send(f'Now playing')
 
 
 class ChatbotNode(Node):
