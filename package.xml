@@ -5,11 +5,8 @@
   <name>tioros</name>
   <version>0.0.1</version>
   <description>Twitch chatbot node package</description>
-  <maintainer email="ros@todo.todo">ros</maintainer>
+  <maintainer email="ros@bob.de">ros</maintainer>
   <license>Apache-2.0</license>
-
-  <exec_depend>sb_msgs</exec_depend>
-  <exec_depend>sb_entity</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>
