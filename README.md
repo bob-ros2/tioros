@@ -12,6 +12,16 @@ to install the below dependencies.
 pip3 install twitchio
 ```
 
+## Setup Node ##
+
+```bash
+# run in your ros2_ws/src folder
+git clone https://gitlab.com/bob-ros2/tioros.git
+cd ..
+colcon build
+. install/setup.bash
+```
+
 ## ROS Node Chatbot
 
 ### Usage
@@ -29,7 +39,7 @@ Related documentation:
 - https://dev.twitch.tv
 - https://twitchtokengenerator.com
 
-### Supported TwitchIO events
+### Supported TwitchIO Events
 The following received Twitch events are published as std_msgs/String 
 topic messages.
 
