@@ -1,6 +1,7 @@
 # TIOROS
 
-TwitchIO ROS Chatbot Node. A ROS - Twitch Chat Bridge.
+[TwitchIO](https://twitchio.dev/en/stable) ROS Chatbot Node. 
+A [ROS](https://ros.org) - Twitch Chat Bridge.
 
 ## Installation Prerequisites
 
