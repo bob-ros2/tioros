@@ -31,7 +31,7 @@ Related documentation:
 > ~channel (string, default: "")\
 Twitch channel user of the chat.
 
-> ~secrets (string, default: "~/.secrets")\
+> ~secrets (string, default: "\~/.secrets")\
 Path to file containing the twitch access token without leading \n
 
 > ~frame_id (string, default: channel)\
