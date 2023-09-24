@@ -1,0 +1,26 @@
+launch:
+
+- arg:
+    name: "channel"
+    default: "SuperBob_6110"
+
+- arg:
+    name: "frame_id"
+    default: "$(var channel)"
+
+- arg:
+    name: "ns"
+    default: "SuperBob"
+
+- node:
+    pkg: "tioros"
+    exec: "chatbot"
+    name: "chatbot"
+    namespace: "$(var ns)"
+    param:
+    -
+      name: "channel"
+      value: "$(var channel)"
+    -
+      name: "frame_id"
+      value: "$(var frame_id)"
