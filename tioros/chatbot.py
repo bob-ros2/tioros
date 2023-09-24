@@ -1,9 +1,23 @@
+#
+# Copyright 2023 BobRos
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 import asyncio
 import rclpy, os, json
 from rclpy.node import Node
-from sb_msgs.msg import StringStamped
-from std_msgs.msg import String
-from twitchio.ext import commands, sounds, routines
+from std_msgs.msg import String, Header
+from twitchio.ext import commands, routines
 # https://twitchio.dev/en/latest/reference.message_contenthtml
     
 
@@ -17,17 +31,17 @@ class Chatbot(commands.Bot):
         with open(self.node.get_parameter(
             'secrets').get_parameter_value().string_value, 'r') as f:
             token = f.read()
-
-        self.node.declare_parameter('channel', 'SuperBob_6110')
+ 
+        self.node.declare_parameter('channel', 'superbob_6110')
         self.node.declare_parameter('frame_id', self.node.get_parameter(
             'channel').get_parameter_value().string_value)
 
         self.frame_id = self.node.get_parameter(
             'frame_id').get_parameter_value().string_value
         self.pub_chat = self.node.create_publisher(
-            StringStamped, 'chat', 10)
+            String, 'chat', 10)
         self.pub_json = self.node.create_publisher(
-            StringStamped, 'json', 10)
+            String, 'json', 10)
 
         self.sub_chat_input = self.node.create_subscription(
             String, 'chat_input', self.chat_input, 10)
@@ -35,8 +49,6 @@ class Chatbot(commands.Bot):
         super().__init__(token=token, prefix='!', 
             initial_channels=[self.node.get_parameter(
                 'channel').get_parameter_value().string_value])
-
-        self.player = sounds.AudioPlayer(callback=self.player_done)
 
         self.spin.start(self.node)
 
@@ -58,13 +70,13 @@ class Chatbot(commands.Bot):
         self.node.get_logger().info('Finished playing sound')
 
 
-    def jsonfy(self, msg):
+    def jsonfy(self, msg, header):
         msg.data = json.dumps({
             "metadata": [
                 {"key": "stamp", "value": float("%d.%09d" 
-                    % (msg.header.stamp.sec, msg.header.stamp.nanosec))},
-                {"key": "frame_id", "value": msg.header.frame_id},
-                {"key": "tags", "value": ["chat",msg.header.frame_id]},
+                    % (header.stamp.sec, header.stamp.nanosec))},
+                {"key": "frame_id", "value": header.frame_id},
+                {"key": "tags", "value": ["chat",header.frame_id]},
                 {"key": "type", "value": msg.data.split(" ")[0]},
                 {"key": "user_id", "value": msg.data.split(" ")[1]},
                 {"key": "user_name", "value": msg.data.split(" ")[2]},
@@ -75,12 +87,13 @@ class Chatbot(commands.Bot):
 
 
     def publish(self, text):
-        msg = StringStamped()
-        msg.header.stamp = self.node.get_clock().now().to_msg()
-        msg.header.frame_id = self.frame_id
+        msg = String()
+        header = Header() 
+        header.stamp = self.node.get_clock().now().to_msg()
+        header.frame_id = self.frame_id
         msg.data = text
         self.pub_chat.publish(msg)
-        self.pub_json.publish(self.jsonfy(msg))
+        self.pub_json.publish(self.jsonfy(msg, header))
         self.node.get_logger().debug(text)
 
 
@@ -120,8 +133,8 @@ class Chatbot(commands.Bot):
 
     @commands.command()
     async def play(self, ctx: commands.Context, *, search: str) -> None:
-        track = await sounds.Sound.ytdl_search(search)
-        self.player.play(track)
+        #track = await sounds.Sound.ytdl_search(search)
+        #self.player.play(track)
         await ctx.send(f'Now playing: {track.title}')
 
 
@@ -137,6 +150,6 @@ def main(args=None):
     ChatbotNode()
     rclpy.shutdown()
 
-
 if __name__ == '__main__':
     main()
+
