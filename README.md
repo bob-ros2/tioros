@@ -11,10 +11,12 @@ to install the below dependencies.
 pip3 install twitchio
 ```
 
-## Usage
+## ROS Node Chatbot
+
+### Usage
 
 ```bash
-# place twitch access token without leading \n into ~/.secrets
+# place twitch access token without trailing \n into ~/.secrets
 # start the node with your twitch id
 ros2 run tioros chatbot channel:=myTwitchTv
 
@@ -26,23 +28,36 @@ Related documentation:
 - https://dev.twitch.tv
 - https://twitchtokengenerator.com
 
-## Node Parameter
+### Supported TwitchIO events
+The following received Twitch events are published as std_msgs/String 
+topic messages.
+
+> ~event_ready\
+Format: event_ready %user_id %nick
+
+> ~event_join\
+Format: event_join %user_id %user_name
+
+> ~event_message\
+Format: event_message %user_id %author_name %message_content
+
+### Node Parameter
 
 > ~channel (string, default: "")\
 Twitch channel user of the chat.
 
 > ~secrets (string, default: "\~/.secrets")\
-Path to file containing the twitch access token without leading \n
+Path to file containing the twitch access token without trailing \n
 
 > ~frame_id (string, default: channel)\
 Frame ID of the Node.
 
-## Published Topics
+### Published Topics
 
 > ~chat (std_msgs/String)\
-Received chat messages from twitch.
+Received chat events from twitch.
 
-## Subscribed Topics
+### Subscribed Topics
 
 > ~chat_input (std_msgs/String)\
 Chat message to send to twitch.
