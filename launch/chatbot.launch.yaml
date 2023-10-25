@@ -2,7 +2,7 @@ launch:
 
 - arg:
     name: "channel"
-    default: "SuperBob_6110"
+    default: "/"
 
 - arg:
     name: "frame_id"
