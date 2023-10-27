@@ -97,7 +97,6 @@ Received chat events from twitch.
 ## Usage
 ```bash
 # Use a input whitelist, remap input and provide re.sub regex to manipulate output
-# 
 ros2 run tioros filter --ros-args -r chat:=/chat_source -p white_list:="whitelist.yaml" -p "substitute:=['^[^ ]+ [^ ]+ ([^ ]+) (.*)', '\\1: \\2']" --log-level debug
 
 # a way to throttle messages (rate)
