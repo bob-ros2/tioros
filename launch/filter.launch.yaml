@@ -1,0 +1,34 @@
+launch:
+
+- arg:
+    name: "ns"
+    default: "/"
+
+- arg:
+    name: "white_list"
+    default: "/home/ros/SuperBob/ros2_ws/src/tioros/yaml/whitelist.yaml"
+
+- arg:
+    name: "black_list"
+    default: ""
+
+- arg:
+    name: "substitute"
+    default: "['^[^ ]+ [^ ]+ ([^ ]+) (.*)', '\\\\1: \\\\2']"
+
+- node:
+    pkg: "tioros"
+    exec: "filter"
+    name: "filter"
+    namespace: "$(var ns)"
+    output: "screen"
+    param:
+    -
+      name: "white_list"
+      value: "$(var white_list)"
+    -
+      name: "black_list"
+      value: "$(var black_list)"
+    -
+      name: "substitute"
+      value: "$(var substitute)"

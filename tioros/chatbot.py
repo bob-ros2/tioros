@@ -13,13 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+import json
 import asyncio
-import rclpy, os, json
+import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String, Header
-from twitchio.ext import commands, routines
+from std_msgs.msg import String
+from std_msgs.msg import Header
+from twitchio.ext import commands
+from twitchio.ext import routines
 # https://twitchio.dev/en/latest/reference.message_contenthtml
-    
+
 
 class Chatbot(commands.Bot):
 
