@@ -2,7 +2,7 @@ launch:
 
 - arg:
     name: "channel"
-    default: "SuperBob_6110"
+    default: "myChannel"
 
 - arg:
     name: "frame_id"
@@ -10,7 +10,7 @@ launch:
 
 - arg:
     name: "ns"
-    default: "SuperBob"
+    default: "/"
 
 - node:
     pkg: "tioros"

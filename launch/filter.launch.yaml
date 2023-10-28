@@ -5,8 +5,12 @@ launch:
     default: "/"
 
 - arg:
+    name: "name"
+    default: "filter"
+
+- arg:
     name: "white_list"
-    default: "/home/ros/SuperBob/ros2_ws/src/tioros/yaml/whitelist.yaml"
+    default: ""
 
 - arg:
     name: "black_list"
@@ -19,7 +23,7 @@ launch:
 - node:
     pkg: "tioros"
     exec: "filter"
-    name: "filter"
+    name: "$(var name)"
     namespace: "$(var ns)"
     output: "screen"
     param:
