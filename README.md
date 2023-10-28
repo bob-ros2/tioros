@@ -20,6 +20,7 @@ A [ROS](https://ros.org) - Twitch Chat Bridge.
   * [Node Parameter](#node-parameter-1)
   * [Subscribed Topics](#subscribed-topics-1)
   * [Published Topics](#published-topics-1)
+  * [Dynamic Reconfigure Parameter](#dynamic-reconfigure-parameter)
 - [Contributing](#contributing)
 
 ## Installation Prerequisites
@@ -143,6 +144,11 @@ Filtered message output.
 
 > ~rejected (std_msgs/String)\
 Rejected message output.
+
+## Dynamic Reconfigure Parameter
+If the file path changes the data will be reloaded.
+> ~white_list\
+  ~black_list
 
 # Contributing
 
