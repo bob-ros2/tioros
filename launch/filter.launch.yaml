@@ -18,7 +18,7 @@ launch:
 
 - arg:
     name: "substitute"
-    default: "['^[^ ]+ [^ ]+ ([^ ]+) (.*)', '\\\\1: \\\\2']"
+    default: "['^[^ ]+ [^ ]+ ([^ ]+)(.*)', '\\\\1:\\\\2']"
 
 - node:
     pkg: "tioros"
