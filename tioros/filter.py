@@ -98,7 +98,7 @@ class FilterNode(Node):
         try:
             with open(filename, 'r') as file:
                 content = yaml.load(file, Loader=yaml.FullLoader)
-                self.get_logger().debug("Loaded %s: %s" % (filename, str(content)))
+                self.get_logger().info("Loaded items: %d" % len(content))
             return content
         except Exception as e: 
             self.get_logger().error("Loading %s: %s" % (filename, str(e)))
