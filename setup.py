@@ -25,7 +25,9 @@ setup(
     entry_points={
         'console_scripts': [
                 'chatbot = tioros.chatbot:main',
-                'filter = tioros.filter:main'
+                'filter = tioros.filter:main',
+                'eventsub = tioros.eventsub',
+                'auth.py = tioros.auth:main',
         ],
     },
 )
