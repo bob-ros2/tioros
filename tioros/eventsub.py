@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-import os, sys, asyncio, signal, requests, json
+import os, sys, asyncio, signal, json
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Header
@@ -49,8 +49,9 @@ class Bot(commands.Bot):
  
         # channel params
         self.node.declare_parameter('channel', 'superbob_6110')
-        self.node.declare_parameter('broadcaster_id', '123456')
-        self.node.declare_parameter('moderator_id', '123456')
+        self.node.declare_parameter('broadcaster_id', '12345')
+        self.node.declare_parameter('moderator_id', self.node.get_parameter(
+            'broadcaster_id').get_parameter_value().string_value)
         self.node.declare_parameter('callback_port', 4000)
         self.node.declare_parameter('events_only', False)
         
@@ -132,6 +133,7 @@ class Bot(commands.Bot):
 
 
     def shutdown(self):
+        self.node.get_logger().info('shutting down EventSub bot ...')
         self.esclient.delete_all_active_subscriptions()
         self.esclient.stop()
         self.esbot.close()
