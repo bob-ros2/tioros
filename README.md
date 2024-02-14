@@ -58,10 +58,13 @@ colcon build
 ```bash
 # place twitch access token without trailing \n into ~/.secrets
 # start the node with your twitch id
-ros2 run tioros chatbot channel:=myTwitchTv
+ros2 run tioros chatbot --ros-args \
+-p channel:=myTwitchTv
 
 # start the node with custom secrets file
-ros2 run tioros chatbot channel:=myTwitchTv secrets:=~/hidden/tokenfile
+ros2 run tioros chatbot --ros-args \
+-p channel:=myTwitchTv \
+-p secrets:=~/hidden/tokenfile
 ```
 Related documentation:
 - https://twitchio.dev/en/stable
@@ -189,7 +192,11 @@ Representation of the received event in JSON form.
 ## Usage
 ```bash
 # Use a input whitelist, remap input and provide re.sub regex to manipulate output
-ros2 run tioros filter --ros-args -r chat:=/chat_source -p white_list:="whitelist.yaml" -p "substitute:=['^[^ ]+ [^ ]+ ([^ ]+) (.*)', '\\1: \\2']" --log-level debug
+ros2 run tioros filter --ros-args \
+-r chat:=/chat_source \
+-p white_list:="whitelist.yaml" \
+-p "substitute:=['^[^ ]+ [^ ]+ ([^ ]+) (.*)', '\\1: \\2']" \
+--log-level debug
 
 # a way to throttle messages (rate)
 # see also https://github.com/ros-tooling/topic_tools
