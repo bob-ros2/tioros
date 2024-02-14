@@ -15,11 +15,18 @@ A [ROS](https://ros.org) - Twitch Chat Bridge.
   * [Node Parameter](#node-parameter)
   * [Subscribed Topics](#subscribed-topics)
   * [Published Topics](#published-topics)
-- [ROS Node FILTER](#ros-node-filter)
+- [Ros Node EVENTSUB](#ros-node-eventsub)
+  * [Pre conditions](#pre-conditions)
+    + [Related links](#related-links)
   * [Usage](#usage-1)
   * [Node Parameter](#node-parameter-1)
-  * [Subscribed Topics](#subscribed-topics-1)
+  * [Supported EventSub Events](#supported-eventsub-events)
   * [Published Topics](#published-topics-1)
+- [Ros Node FILTER](#ros-node-filter)
+  * [Usage](#usage-2)
+  * [Node Parameter](#node-parameter-2)
+  * [Subscribed Topics](#subscribed-topics-1)
+  * [Published Topics](#published-topics-2)
   * [Dynamic Reconfigure Parameter](#dynamic-reconfigure-parameter)
 - [Contributing](#contributing)
 
@@ -92,6 +99,83 @@ Chat message to send to twitch.
 
 > ~chat (std_msgs/String)\
 Received chat events from twitch.
+
+# Ros Node EVENTSUB
+
+This Twitch ROS node is dedicated to the Twitch [EventSub extension](https://twitchio.dev/en/stable/exts/eventsub.html). With this extension more events can be retrieved than in a normal chat bot where just an app token will be used. To set it up some more things are needed.
+
+## Pre conditions
+This is just a rough overview what is needed:
+
+
+Existing application in the [Twitch developer console](https://dev.twitch.tv/console/)
+- Client credentials client_id and client_secret are known
+- Redirect callback URL where to publish events
+- Redirect to http://localhost:3000 to retrieve the user (yourself) scopes code from authorization_code grant flow to get in a next step the intial token and refresh_token
+
+Web proxy dispatching the incoming https callback service via http to the eventsub bot listen port (default 4000)
+- Externaly known hostname (may use dyn DNS service for private networks)
+- Open port 443
+- SSL Certificate (get a free one from [lets encrypt](https://letsencrypt.org/))
+
+### Related links
+Everything needed to understand EventSub can be found here:
+- https://twitchio.dev/en/stable/exts/eventsub.html\
+- https://dev.twitch.tv/docs/eventsub/\
+- https://dev.twitch.tv/docs/authentication/\
+- https://discuss.dev.twitch.com/
+
+## Usage
+```bash
+# run with given parameter
+ros2 run tioros eventsub --ros-args -p channel:=myChannelName -p broadcaster_id:="'12345'" -p credentials:=/path/to/secret.json
+
+```
+
+## Node Parameter
+
+> ~broadcaster_id (string, default: '12345')\
+The broadcaster_id ID
+
+> ~moderator_id (string, default: broadcaster_id)\
+The moderator_id ID (maybe from yourself), this is the numeric presentation of the account which has the required scopes. Currently neccesary:\
+`moderator:read:followers channel:read:subscriptions chat:edit chat:read`
+        
+
+> ~callback_port: (int, default: 4000)\
+The listen port for incoming event notifications from callback URL.
+
+> ~channel (string, default: 'myChannel')\
+The Twitch channel name.
+
+> ~credentials (string, default: $HOME/.credentials)\
+Path to a JSON file with a dict containing the client credentials client_id, client_secret and refresh_token.
+
+> ~events_only (bool, default: false\
+If this parameter is set to false the bot does not respond with a thank you message in the channel chat for incoming events. Events are only published via the eventsub ROS topic.
+
+> ~frame_id (string, default: channel)\
+Used frame_id in the JSON data published by the json ROS topic. This data can be used e.g. to store the data in a DB.
+
+## Supported EventSub Events
+The following received Twitch EventSub events are published as std_msgs/String topic messages.
+
+> ~eventsub_channelfollow\
+Format: eventsub_channelfollow %user_id %user_name %raw
+
+> ~eventsub_subscription\
+Format: eventsub_subscription %user_id %user_name %raw
+
+> ~eventsub_raid\
+Format: eventsub_raid %user_id %user_name %raw
+
+## Published Topics
+
+> ~eventsub (std_msgs/String)\
+Representation from received event in JSON form.
+
+> ~json (std_msgs/String)\
+Representation from received event in JSON form.
 
 # Ros Node FILTER
 
