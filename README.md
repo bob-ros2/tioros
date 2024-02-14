@@ -102,7 +102,7 @@ Received chat events from twitch.
 
 # Ros Node EVENTSUB
 
-This Twitch ROS node is dedicated to the Twitch [EventSub extension](https://twitchio.dev/en/stable/exts/eventsub.html). With this extension more events can be retrieved than in a normal chat bot where just an app token will be used. To set it up some more things are needed.
+This Twitch ROS node is dedicated to the Twitch [EventSub extension](https://twitchio.dev/en/stable/exts/eventsub.html). With this extension more events can be retrieved than in a simple chat bot. To set it up some more things are needed.
 
 ## Pre conditions
 This is just a rough overview what is needed:
