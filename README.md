@@ -128,7 +128,10 @@ Everything needed to understand EventSub can be found here:
 ## Usage
 ```bash
 # run with given parameter
-ros2 run tioros eventsub --ros-args -p channel:=myChannelName -p broadcaster_id:="'12345'" -p credentials:=/path/to/secret.json
+ros2 run tioros eventsub --ros-args \
+-p channel:=myChannelName \
+-p broadcaster_id:="'12345'" \
+-p credentials:=/path/to/secret.json
 
 ```
 
@@ -151,8 +154,8 @@ The Twitch channel name.
 > ~credentials (string, default: $HOME/.credentials)\
 Path to a JSON file with a dict containing the client credentials client_id, client_secret and refresh_token.
 
-> ~events_only (bool, default: false\
-If this parameter is set to false the bot does not respond with a thank you message in the channel chat for incoming events. Events are only published via the eventsub ROS topic.
+> ~events_only (bool, default: false)\
+If this parameter is set to true the bot does not respond with a thank you message in the channel chat for incoming events. Events are only published via the eventsub ROS topic.
 
 > ~frame_id (string, default: channel)\
 Used frame_id in the JSON data published by the json ROS topic. This data can be used e.g. to store the data in a DB.
