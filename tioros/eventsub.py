@@ -46,13 +46,18 @@ class Bot(commands.Bot):
             self.node.get_logger().error(
                 'token_from_refresh_token failed')
             sys.exit(1)
- 
+
         # channel params
-        self.node.declare_parameter('channel', 'superbob_6110')
-        self.node.declare_parameter('broadcaster_id', '12345')
-        self.node.declare_parameter('moderator_id', self.node.get_parameter(
-            'broadcaster_id').get_parameter_value().string_value)
-        self.node.declare_parameter('callback_port', 4000)
+        self.node.declare_parameter('channel', 
+            os.getenv('TW_CHANNEL','superbob_6110'))
+        self.node.declare_parameter('broadcaster_id', 
+            os.getenv('TW_BROADCASTER_ID','123456'))
+        self.node.declare_parameter('moderator_id', 
+            os.getenv('TW_MODERATOR_ID',
+                self.node.get_parameter(
+                    'broadcaster_id').get_parameter_value().string_value))
+        self.node.declare_parameter('callback_port', 
+            int(os.getenv('TW_CALLBACK_PORT','4000')))
         self.node.declare_parameter('events_only', False)
         
         # create ROS publisher
