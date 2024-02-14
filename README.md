@@ -138,7 +138,7 @@ ros2 run tioros eventsub --ros-args \
 ## Node Parameter
 
 > ~broadcaster_id (string, default: '12345')\
-The broadcaster_id ID
+The broadcaster ID
 
 > ~moderator_id (string, default: broadcaster_id)\
 The moderator_id ID (maybe from yourself), this is the numeric presentation of the account which has the required scopes. Currently neccesary:\
@@ -158,7 +158,7 @@ Path to a JSON file with a dict containing the client credentials client_id, cli
 If this parameter is set to true the bot does not respond with a thank you message in the channel chat for incoming events. Events are only published via the eventsub ROS topic.
 
 > ~frame_id (string, default: channel)\
-Used frame_id in the JSON data published by the json ROS topic. This data can be used e.g. to store the data in a DB.
+Used frame_id in the JSON data published by the json ROS topic. The json topic can be used e.g. to store the data in a DB.
 
 ## Supported EventSub Events
 The following received Twitch EventSub events are published as std_msgs/String topic messages.
@@ -175,10 +175,10 @@ Format: eventsub_raid %user_id %user_name %raw
 ## Published Topics
 
 > ~eventsub (std_msgs/String)\
-Representation from received event in JSON form.
+Representation of the received event in string form.
 
 > ~json (std_msgs/String)\
-Representation from received event in JSON form.
+Representation of the received event in JSON form.
 
 # Ros Node FILTER
 
