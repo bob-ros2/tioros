@@ -17,7 +17,6 @@ A [ROS](https://ros.org) - Twitch Chat Bridge.
   * [Published Topics](#published-topics)
 - [Ros Node EVENTSUB](#ros-node-eventsub)
   * [Pre conditions](#pre-conditions)
-    + [Related links](#related-links)
   * [Usage](#usage-1)
   * [Node Parameter](#node-parameter-1)
   * [Supported EventSub Events](#supported-eventsub-events)
@@ -28,7 +27,10 @@ A [ROS](https://ros.org) - Twitch Chat Bridge.
   * [Subscribed Topics](#subscribed-topics-1)
   * [Published Topics](#published-topics-2)
   * [Dynamic Reconfigure Parameter](#dynamic-reconfigure-parameter)
+- [Authorization and token Tool AUTH.PY](#authorization-and-token-tool-authpy)
+  * [Usage](#usage-3)
 - [Contributing](#contributing)
+
 
 ## Installation Prerequisites
 
@@ -36,7 +38,7 @@ Use the package manager [pip3](https://pip.pypa.io/en/stable/)
 to install the below dependencies.
 
 ```bash
-pip3 install twitchio
+pip3 install twitchio requests
 ```
 
 ## Setup Package ##
@@ -65,6 +67,8 @@ Related documentation:
 - https://twitchio.dev/en/stable
 - https://dev.twitch.tv
 - https://twitchtokengenerator.com
+
+**Caution!** The above tokengenerator should not be used, instead check out below the [Authorization and token Tool AUTH.PY](#authorization-and-token-tool-authpy) to generate yourself your tokens.
 
 ## Supported TwitchIO Events
 The following received Twitch events are published as std_msgs/String 
@@ -118,8 +122,8 @@ Web proxy dispatching the incoming https callback service via http to the events
 - Open port 443
 - SSL Certificate (get a free one from [lets encrypt](https://letsencrypt.org/))
 
-### Related links
-Everything needed to understand EventSub can be found here:
+
+**Related links:**
 - https://twitchio.dev/en/stable/exts/eventsub.html\
 - https://dev.twitch.tv/docs/eventsub/\
 - https://dev.twitch.tv/docs/authentication/\
@@ -236,6 +240,50 @@ Rejected message output.
 If the file path changes the data will be reloaded.
 > ~white_list\
   ~black_list
+
+# Authorization and token tool AUTH.PY
+
+Simple Python Twitch authentication and token tools.
+ 
+When using as lib import the function you wish to use. E.g.:
+
+```bash
+from .auth import credentials_from_json_file, token_from_refresh_token
+```
+Find below the CLI help output when using it as shell script:
+
+## Usage
+
+```bash
+# you can either use
+$ ros2 run tioros auth.py -h
+
+# or call it directly
+$ python3 auth.py -h
+usage: auth.py [-h] [-f CREDENTIALS] [-j] [-i ID] [-s SECRET] [-r REFRESH] [-c CODE] [-t STATE] [-p SCOPES] [-d REDIRECT]
+ 
+Simple Twitch authentication and token cli tool. Can request token from refresh_token, authorization_code for given scopes, etc.
+ 
+options:
+  -h, --help            show this help message and exit
+  -f CREDENTIALS, --credentials CREDENTIALS
+                        json file with credential data, will overwrite commandline args if given and contained in the file (default: )
+  -j, --json            dumps example credentials data (default: False)
+  -i ID, --id ID        client_id (default: )
+  -s SECRET, --secret SECRET
+                        client_secret (default: )
+  -r REFRESH, --refresh REFRESH
+                        refresh_token (default: )
+  -c CODE, --code CODE  code for authorization code grant flow, needs client_id and client_secret (default: )
+  -t STATE, --state STATE
+                       state, a unique id for the grant flow to prevent CSRF attacks, the server returns this string in the redirect URI and the client should prove it
+                        (default: )
+  -p SCOPES, --scopes SCOPES
+                        scopes, a whitespace delimeted list with scopes to be authorized, e.g.: moderator:read:followers channel:read:subscriptions chat:edit chat:read
+                        (default: )
+  -d REDIRECT, --redirect REDIRECT
+                        redirect_uri (default: http://localhost:3000)
+```
 
 # Contributing
 
