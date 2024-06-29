@@ -10,7 +10,7 @@ launch:
 
 - arg:
     name: "ns"
-    default: "SuperBob"
+    default: "chat"
 
 - node:
     pkg: "tioros"
