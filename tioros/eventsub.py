@@ -233,11 +233,11 @@ async def eventsub_notification_subscription(
 
 @node.bot.esbot.event()
 async def eventsub_notification_raid(
-    event: twitchio.Channel):
+    event: eventsub.ChannelRaidData):
     node.get_logger().info('Received raid event')
-    user = event.user()
+    user = event.raider
     node.bot.channel_send(
-        f'@{user.name} is raiding, WOW! <3 Thank you!!!')
+        f'@{user.name} is raiding with {event.viewer_count} people, WOW! <3 Thank you!!!')
     node.bot.channel_send(
         f'/shoutout {user.name}')
     node.bot.publish(
