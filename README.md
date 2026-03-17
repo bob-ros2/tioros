@@ -1,4 +1,4 @@
-# TIOROS [tioros](https://github.com/bob-ros2/tioros)
+# ROS Package [tioros](https://github.com/bob-ros2/tioros)
 [![ROS CI](https://github.com/bob-ros2/tioros/actions/workflows/ros-ci.yml/badge.svg)](https://github.com/bob-ros2/tioros/actions/workflows/ros-ci.yml)
 
 [TwitchIO](https://twitchio.dev/en/stable) ROS Chatbot Nodes. 
