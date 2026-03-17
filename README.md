@@ -23,19 +23,44 @@ colcon build --packages-select tioros
 . install/setup.bash
 ```
 
+## Authentication Methods
+
+There are two primary ways to authenticate with Twitch, depending on the node you are using. You can store both in a unified `~/.credentials` file:
+
+1. **OAuth Flow (Traditional IRC Chatbot)**:
+   * **What is it?**: A single long-living Access Token.
+   * **Storage**: A plain text file containing just the token (e.g., `oauth:xxxxxxxxxxxxx`) **OR** a `access_token` field in a JSON file.
+   * **Usage**: Standard for sending/receiving chat messages.
+   * **Env Var**: `TIOROS_TOKEN` (direct token) or `TIOROS_CREDENTIALS` (path to file).
+
+2. **App Credentials (EventSub Node)**:
+   * **What is it?**: `client_id`, `client_secret` and a `refresh_token`.
+   * **Storage**: A JSON file (recommended for automation with `auth.py`). 
+   * **Example `.credentials` (JSON)**:
+     ```json
+     {
+       "client_id": "YOUR_CLIENT_ID",
+       "client_secret": "YOUR_CLIENT_SECRET",
+       "refresh_token": "YOUR_REFRESH_TOKEN",
+       "access_token": "YOUR_CURRENT_OAUTH_TOKEN",
+       "webhook_secret": "YOUR_WEBHOOK_SECRET",
+       "callback_route": "https://your.callback.url/path"
+     }
+     ```
+   * **Usage**: Required for rich events (follows, raids).
+
 # ROS Node: chatbot
 
 ## Usage
 
 ```bash
-# Set credentials via environment variable
-export TIOROS_SECRETS=~/.secrets
+# Set token directly via environment variable
+export TIOROS_TOKEN=oauth:xxxxxxxxxxxxxx
 ros2 run tioros chatbot --ros-args -p channel:=myTwitchTv
 
-# Or start the node with standard ROS parameters
-ros2 run tioros chatbot --ros-args \
-  -p channel:=myTwitchTv \
-  -p secrets:=~/hidden/tokenfile
+# Or use a credentials file (Smart Load: supports plain text or JSON field)
+export TIOROS_CREDENTIALS=~/.credentials
+ros2 run tioros chatbot --ros-args -p channel:=myTwitchTv
 ```
 
 ## Supported TwitchIO Events
@@ -47,12 +72,13 @@ The following received Twitch events are published as `std_msgs/String` messages
 
 ## Node Parameters
 
-| Parameter | Type | Default | Env Var | Description |
-|-----------|------|---------|---------|-------------|
-| `channel` | string | `superbob_6110` | `TIOROS_CHANNEL` | Twitch channel to join. |
-| `secrets` | string | `~/.secrets` | `TIOROS_SECRETS` | Path to file containing the Twitch access token. |
-| `frame_id`| string | `channel` | `TIOROS_FRAME_ID` | Frame ID for published messages. |
-| `prefix`  | string | `!` | `TIOROS_PREFIX` | Command prefix for the bot. |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `channel` | string | `superbob_6110` | Twitch channel to join. (Env: `TIOROS_CHANNEL`) |
+| `token`   | string | `""` | Direct Twitch Access Token. (Env: `TIOROS_TOKEN`) |
+| `credentials` | string | `~/.credentials` | Path to credentials file (plain or JSON). (Env: `TIOROS_CREDENTIALS`) |
+| `frame_id`| string | `channel` | Frame ID for published messages. (Env: `TIOROS_FRAME_ID`) |
+| `prefix`  | string | `!` | Command prefix for the bot. (Env: `TIOROS_PREFIX`) |
 
 ## Topics
 
@@ -69,20 +95,20 @@ This node uses the [Twitch EventSub extension](https://twitchio.dev/en/stable/ex
 export TIOROS_CREDENTIALS=~/.credentials
 ros2 run tioros eventsub --ros-args \
   -p channel:=myChannelName \
-  -p broadcaster_id:="'12345'"
+  -p broadcaster_id:="'123456'"
 ```
 
 ## Node Parameters
 
-| Parameter | Type | Default | Env Var | Description |
-|-----------|------|---------|---------|-------------|
-| `channel` | string | `superbob_6110` | `TIOROS_CHANNEL` | Twitch channel name. |
-| `broadcaster_id` | string | `123456` | `TIOROS_BROADCASTER_ID` | The numeric Twitch ID of the broadcaster. |
-| `moderator_id` | string | `broadcaster_id` | `TIOROS_MODERATOR_ID` | The numeric Twitch ID of the moderator account. |
-| `credentials` | string | `~/.credentials` | `TIOROS_CREDENTIALS` | Path to JSON file with API credentials. |
-| `callback_port` | int | `4000` | `TIOROS_CALLBACK_PORT` | Port for incoming webhook notifications. |
-| `events_only` | bool | `false` | `TIOROS_EVENTS_ONLY` | If true, disables automated "Thank you" messages in chat. |
-| `frame_id` | string | `channel` | `TIOROS_FRAME_ID` | Frame ID for message headers. |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `channel` | string | `superbob_6110` | Twitch channel name. (Env: `TIOROS_CHANNEL`) |
+| `broadcaster_id` | string | `123456` | The numeric Twitch ID of the broadcaster. (Env: `TIOROS_BROADCASTER_ID`) |
+| `moderator_id` | string | `broadcaster_id` | The numeric Twitch ID of the moderator account. (Env: `TIOROS_MODERATOR_ID`) |
+| `credentials` | string | `~/.credentials` | Path to JSON file with API credentials. (Env: `TIOROS_CREDENTIALS`) |
+| `callback_port` | int | `4000` | Port for incoming webhook notifications. (Env: `TIOROS_CALLBACK_PORT`) |
+| `events_only` | bool | `false` | If true, disables automated "Thank you" messages in chat. (Env: `TIOROS_EVENTS_ONLY`) |
+| `frame_id` | string | `channel` | Frame ID for message headers. (Env: `TIOROS_FRAME_ID`) |
 
 ## Topics
 
@@ -101,13 +127,13 @@ ros2 run tioros filter --ros-args \
 
 ## Node Parameters
 
-| Parameter | Type | Default | Env Var | Description |
-|-----------|------|---------|---------|-------------|
-| `white_filter` | string array | `['']` | `TIOROS_WHITE_FILTER` | Comma-separated list for whitelist rules. |
-| `black_filter` | string array | `['']` | `TIOROS_BLACK_FILTER` | Comma-separated list for blacklist rules. |
-| `white_list` | string | `""` | `TIOROS_WHITE_LIST` | Path to YAML file with whitelist regex. |
-| `black_list` | string | `""` | `TIOROS_BLACK_LIST` | Path to YAML file with blacklist regex. |
-| `substitute` | string array | `['']` | `TIOROS_SUBSTITUTE` | Pattern and replacement: `['pattern','replace']`. |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `white_filter` | string array | `['']` | Comma-separated list for whitelist rules. (Env: `TIOROS_WHITE_FILTER`) |
+| `black_filter` | string array | `['']` | Comma-separated list for blacklist rules. (Env: `TIOROS_BLACK_FILTER`) |
+| `white_list` | string | `""` | Path to YAML file with whitelist regex. (Env: `TIOROS_WHITE_LIST`) |
+| `black_list` | string | `""` | Path to YAML file with blacklist regex. (Env: `TIOROS_BLACK_LIST`) |
+| `substitute` | string array | `['']` | Pattern and replacement: `['pattern','replace']`. (Env: `TIOROS_SUBSTITUTE`) |
 
 ## Topics
 

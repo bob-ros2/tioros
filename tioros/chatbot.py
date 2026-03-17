@@ -21,6 +21,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Header
 from twitchio.ext import commands, routines
+from .auth import credentials_from_json_file
 
 
 class Chatbot(commands.Bot):
@@ -28,26 +29,46 @@ class Chatbot(commands.Bot):
     def __init__(self, node):
         self.node = node
 
-        # Declare parameters with optional environment variable defaults
-        home_secrets = os.path.join(os.path.expanduser('~'), '.secrets')
-        default_secrets = os.getenv('TIOROS_SECRETS', home_secrets)
-        self.node.declare_parameter('secrets', default_secrets)
+        # 1. Parameter: Direct token (highest priority)
+        # Allows setting the token directly via environment variable TIOROS_TOKEN
+        self.node.declare_parameter('token', os.getenv('TIOROS_TOKEN', ''))
 
-        with open(
-            self.node.get_parameter('secrets').get_parameter_value().string_value,
-            'r'
-        ) as f:
-            token = f.read()
+        # 2. Parameter: Credentials file path (fallback)
+        home_creds = os.path.join(os.path.expanduser('~'), '.credentials')
+        default_creds = os.getenv('TIOROS_CREDENTIALS', home_creds)
+        self.node.declare_parameter('credentials', default_creds)
 
+        token = self.node.get_parameter('token').get_parameter_value().string_value
+
+        if not token:
+            # Try loading from credentials file (Smart Load)
+            path = self.node.get_parameter('credentials').get_parameter_value().string_value
+            if os.path.exists(path):
+                # Try JSON first (consistency with auth.py and eventsub)
+                data = credentials_from_json_file(path)
+                if data and 'access_token' in data:
+                    token = data['access_token']
+                else:
+                    # Fallback: Read as plain text (legacy .secrets style)
+                    with open(path, 'r') as f:
+                        token = f.read().strip()
+
+        if not token:
+            self.node.get_logger().error(
+                "No Twitch token found! Set TIOROS_TOKEN or TIOROS_CREDENTIALS file."
+            )
+            # We don't exit here to allow standard ROS life cycle, 
+            # but TwitchIO will likely fail on run()
+
+        # Channel & basic config
         default_channel = os.getenv('TIOROS_CHANNEL', 'superbob_6110')
         self.node.declare_parameter('channel', default_channel)
-
+        
         default_frame_id = os.getenv('TIOROS_FRAME_ID', self.node.get_parameter(
             'channel').get_parameter_value().string_value)
         self.node.declare_parameter('frame_id', default_frame_id)
 
-        default_prefix = os.getenv('TIOROS_PREFIX', '!')
-        self.node.declare_parameter('prefix', default_prefix)
+        self.node.declare_parameter('prefix', os.getenv('TIOROS_PREFIX', '!'))
 
         self.frame_id = self.node.get_parameter(
             'frame_id').get_parameter_value().string_value
@@ -68,10 +89,8 @@ class Chatbot(commands.Bot):
 
     @routines.routine(seconds=30.0)
     async def healthcheck(self):
-        # Reliable check using the underlying websocket state
         is_actually_alive = False
         if hasattr(self, '_connection') and self._connection:
-            # Check if websocket is present and not closed
             is_actually_alive = self._connection.is_alive
 
         status = "CONNECTED" if is_actually_alive else "DISCONNECTED"
@@ -80,7 +99,6 @@ class Chatbot(commands.Bot):
         if not is_actually_alive:
             self.node.get_logger().debug("[Twitch Healthcheck] Attempting to reconnect...")
             try:
-                # connect() handles the IRC/WS connection logic in TwitchIO
                 await self.connect()
                 self.node.get_logger().debug("[Twitch Healthcheck] Reconnect initiated.")
             except Exception as e:
@@ -127,32 +145,24 @@ class Chatbot(commands.Bot):
         self.node.get_logger().debug(text)
 
     async def event_ready(self):
-        # We are logged in and ready to chat and use commands...
         self.node.get_logger().info(f'Logged in as | {self.nick}')
         self.node.get_logger().info(f'User id is | {self.user_id}')
         self.publish("event_ready %d %s" % (self.user_id, self.nick))
 
     async def event_reconnect(self):
-        # Triggered when Twitch requested a reconnect or the bot is reconnecting
         self.node.get_logger().debug("TwitchIO event: Reconnect triggered")
 
     async def event_error(self, error, data=None):
-        # Triggered on internal library errors
         self.node.get_logger().debug(f"TwitchIO event: Error occurred: {error}")
 
     async def event_message(self, message):
-        # Messages with echo set to True are messages sent by the bot...
-        # For now we just want to ignore them
         if message.echo:
             return
-        # Output contents of our message
         userdata = await self.fetch_users([message.author.name])
         log_msg = "event_message %d %s %s" % (
             userdata[0].id, message.author.name, message.content
         )
         self.publish(log_msg)
-        # Since we have commands and are overriding the default event_message
-        # We must let the bot know we want to handle and invoke our commands...
         await self.handle_commands(message)
 
     async def event_join(self, channel, user):
@@ -168,8 +178,6 @@ class Chatbot(commands.Bot):
 
     @commands.command()
     async def play(self, ctx: commands.Context, *, search: str) -> None:
-        # track = await sounds.Sound.ytdl_search(search)
-        # self.player.play(track)
         await ctx.send('Now playing')
 
 
