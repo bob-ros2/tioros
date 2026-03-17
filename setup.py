@@ -6,7 +6,7 @@ package_name = 'tioros'
 
 setup(
     name=package_name,
-    version='0.0.1',
+    version='0.0.3',
     packages=[package_name],
     data_files=[
         ('share/ament_index/resource_index/packages',
@@ -17,17 +17,16 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='ros',
-    maintainer_email='ros@bob.de',
-    description='TwitchIO ROS Package',
-    license='Apache2.0',
-    tests_require=['pytest'],
+    maintainer='Bob Ros',
+    maintainer_email='bobmeuchelm@gmail.com',
+    description='Twitch-ROS chatbot node package',
+    license='Apache-2.0',
     entry_points={
         'console_scripts': [
                 'chatbot = tioros.chatbot:main',
                 'filter = tioros.filter:main',
-                'eventsub = tioros.eventsub',
-                'auth.py = tioros.auth:main',
+                'eventsub = tioros.eventsub:main',
+                'auth = tioros.auth:main',
         ],
     },
 )

@@ -1,5 +1,5 @@
 #
-# Copyright 2023 BobRos
+# Copyright 2023 Bob Ros
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,16 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import os
 import json
 import asyncio
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
-from std_msgs.msg import Header
-from twitchio.ext import commands
-from twitchio.ext import routines
-# https://twitchio.dev/en/latest/reference.message_contenthtml
+from std_msgs.msg import String, Header
+from twitchio.ext import commands, routines
 
 
 class Chatbot(commands.Bot):
@@ -30,57 +28,86 @@ class Chatbot(commands.Bot):
     def __init__(self, node):
         self.node = node
 
-        self.node.declare_parameter('secrets', 
-            os.path.join(os.path.expanduser('~'), '.secrets'))
-        with open(self.node.get_parameter(
-            'secrets').get_parameter_value().string_value, 'r') as f:
+        # Declare parameters with optional environment variable defaults
+        home_secrets = os.path.join(os.path.expanduser('~'), '.secrets')
+        default_secrets = os.getenv('TIOROS_SECRETS', home_secrets)
+        self.node.declare_parameter('secrets', default_secrets)
+
+        with open(
+            self.node.get_parameter('secrets').get_parameter_value().string_value,
+            'r'
+        ) as f:
             token = f.read()
- 
-        self.node.declare_parameter('channel', 'superbob_6110')
-        self.node.declare_parameter('frame_id', self.node.get_parameter(
+
+        default_channel = os.getenv('TIOROS_CHANNEL', 'superbob_6110')
+        self.node.declare_parameter('channel', default_channel)
+
+        default_frame_id = os.getenv('TIOROS_FRAME_ID', self.node.get_parameter(
             'channel').get_parameter_value().string_value)
+        self.node.declare_parameter('frame_id', default_frame_id)
+
+        default_prefix = os.getenv('TIOROS_PREFIX', '!')
+        self.node.declare_parameter('prefix', default_prefix)
 
         self.frame_id = self.node.get_parameter(
             'frame_id').get_parameter_value().string_value
-        self.pub_chat = self.node.create_publisher(
-            String, 'chat', 10)
-        self.pub_json = self.node.create_publisher(
-            String, 'json', 10)
+        self.pub_chat = self.node.create_publisher(String, 'chat', 10)
+        self.pub_json = self.node.create_publisher(String, 'json', 10)
 
         self.sub_chat_input = self.node.create_subscription(
             String, 'chat_input', self.chat_input, 10)
 
-        super().__init__(token=token, prefix='!', 
+        super().__init__(
+            token=token,
+            prefix=self.node.get_parameter('prefix').get_parameter_value().string_value,
             initial_channels=[self.node.get_parameter(
                 'channel').get_parameter_value().string_value])
 
         self.spin.start(self.node)
+        self.healthcheck.start()
 
+    @routines.routine(seconds=30.0)
+    async def healthcheck(self):
+        # Reliable check using the underlying websocket state
+        is_actually_alive = False
+        if hasattr(self, '_connection') and self._connection:
+            # Check if websocket is present and not closed
+            is_actually_alive = self._connection.is_alive
+
+        status = "CONNECTED" if is_actually_alive else "DISCONNECTED"
+        self.node.get_logger().debug(f"[Twitch Healthcheck] Connection Status: {status}")
+
+        if not is_actually_alive:
+            self.node.get_logger().debug("[Twitch Healthcheck] Attempting to reconnect...")
+            try:
+                # connect() handles the IRC/WS connection logic in TwitchIO
+                await self.connect()
+                self.node.get_logger().debug("[Twitch Healthcheck] Reconnect initiated.")
+            except Exception as e:
+                self.node.get_logger().debug(f"[Twitch Healthcheck] Reconnect failed: {e}")
 
     @routines.routine(seconds=0.5)
     async def spin(self, node: Node):
         rclpy.spin_once(node, timeout_sec=0.01)
 
-
     def chat_input(self, msg):
         self.node.get_logger().info('chat_input: %s' % msg.data)
-        channel = self.get_channel(self.node.get_parameter('channel')
-            .get_parameter_value().string_value)
-        loop = asyncio.get_event_loop()
-        loop.create_task(channel.send(msg.data))
-
+        channel_name = self.node.get_parameter('channel').get_parameter_value().string_value
+        channel = self.get_channel(channel_name)
+        if channel:
+            loop = asyncio.get_event_loop()
+            loop.create_task(channel.send(msg.data))
 
     async def player_done(self):
         self.node.get_logger().info('Finished playing sound')
 
-
     def jsonfy(self, msg, header):
+        stamp = float("%d.%09d" % (header.stamp.sec, header.stamp.nanosec))
         msg.data = json.dumps({
             "metadata": [
-                {"key": "stamp", "value": float("%d.%09d" 
-                    % (header.stamp.sec, header.stamp.nanosec))},
+                {"key": "stamp", "value": stamp},
                 {"key": "frame_id", "value": header.frame_id},
-                {"key": "tags", "value": ["chat",header.frame_id]},
+                {"key": "tags", "value": ["chat", header.frame_id]},
                 {"key": "type", "value": msg.data.split(" ")[0]},
                 {"key": "user_id", "value": msg.data.split(" ")[1]},
                 {"key": "user_name", "value": msg.data.split(" ")[2]},
@@ -89,17 +116,15 @@ class Chatbot(commands.Bot):
         })
         return msg
 
-
     def publish(self, text):
         msg = String()
-        header = Header() 
-        header.stamp = self.node.get_clock().now().to_msg()
-        header.frame_id = self.frame_id
+        new_header = Header()
+        new_header.stamp = self.node.get_clock().now().to_msg()
+        new_header.frame_id = self.frame_id
         msg.data = text
         self.pub_chat.publish(msg)
-        self.pub_json.publish(self.jsonfy(msg, header))
+        self.pub_json.publish(self.jsonfy(msg, new_header))
         self.node.get_logger().debug(text)
-
 
     async def event_ready(self):
         # We are logged in and ready to chat and use commands...
@@ -107,6 +132,13 @@ class Chatbot(commands.Bot):
         self.node.get_logger().info(f'User id is | {self.user_id}')
         self.publish("event_ready %d %s" % (self.user_id, self.nick))
 
+    async def event_reconnect(self):
+        # Triggered when Twitch requested a reconnect or the bot is reconnecting
+        self.node.get_logger().debug("TwitchIO event: Reconnect triggered")
+
+    async def event_error(self, error, data=None):
+        # Triggered on internal library errors
+        self.node.get_logger().debug(f"TwitchIO event: Error occurred: {error}")
 
     async def event_message(self, message):
         # Messages with echo set to True are messages sent by the bot...
@@ -115,18 +147,18 @@ class Chatbot(commands.Bot):
             return
         # Output contents of our message
         userdata = await self.fetch_users([message.author.name])
-        self.publish("event_message %d %s %s" 
-            % (userdata[0].id, message.author.name, message.content))
+        log_msg = "event_message %d %s %s" % (
+            userdata[0].id, message.author.name, message.content
+        )
+        self.publish(log_msg)
         # Since we have commands and are overriding the default event_message
         # We must let the bot know we want to handle and invoke our commands...
         await self.handle_commands(message)
-
 
     async def event_join(self, channel, user):
         userdata = await self.fetch_users([user.name])
         self.publish("event_join %s %s" % (userdata[0].id, user.name))
         await channel.send("Welcome @%s!" % user.name)
-
 
     @commands.command()
     async def hello(self, ctx: commands.Context):
@@ -134,15 +166,15 @@ class Chatbot(commands.Bot):
         self.publish("command %d %s hello" % (userdata[0].id, ctx.author.name))
         await ctx.send(f'Hello {ctx.author.name}!')
 
-
     @commands.command()
     async def play(self, ctx: commands.Context, *, search: str) -> None:
-        #track = await sounds.Sound.ytdl_search(search)
-        #self.player.play(track)
-        await ctx.send(f'Now playing')
+        # track = await sounds.Sound.ytdl_search(search)
+        # self.player.play(track)
+        await ctx.send('Now playing')
 
 
 class ChatbotNode(Node):
+
     def __init__(self):
         super().__init__('chatbot')
         self.bot = Chatbot(self)
@@ -154,6 +186,6 @@ def main(args=None):
     ChatbotNode()
     rclpy.shutdown()
 
+
 if __name__ == '__main__':
     main()
-

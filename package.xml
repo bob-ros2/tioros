@@ -3,10 +3,21 @@
   schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>tioros</name>
-  <version>0.0.2</version>
-  <description>Twitch chatbot node package</description>
-  <maintainer email="ros@bob.de">BobRos</maintainer>
+  <version>0.0.3</version>
+  <description>Twitch-ROS chatbot node package</description>
+  <maintainer email="bobmeuchelm@gmail.com">Bob Ros</maintainer>
   <license>Apache-2.0</license>
+
+  <url type="website">https://github.com/bob-ros2/tioros</url>
+  <url type="repository">https://github.com/bob-ros2/tioros</url>
+  <url type="bugtracker">https://github.com/bob-ros2/tioros/issues</url>
+
+  <author email="bobmeuchelm@gmail.com">Bob Ros</author>
+  
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>
