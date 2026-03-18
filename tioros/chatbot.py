@@ -28,6 +28,7 @@ class Chatbot(commands.Bot):
 
     def __init__(self, node):
         self.node = node
+        self._is_ready = False
 
         # 1. Parameter: Direct token (highest priority)
         self.node.declare_parameter('token', os.getenv('TIOROS_TOKEN', ''))
@@ -95,13 +96,20 @@ class Chatbot(commands.Bot):
 
     @routines.routine(seconds=30.0)
     async def healthcheck(self):
+        # Skip healthcheck until the bot has initialized at least once
+        if not self._is_ready:
+            return
+
         is_actually_alive = False
         if hasattr(self, '_connection') and self._connection:
             is_actually_alive = self._connection.is_alive
-        status = "CONNECTED" if is_actually_alive else "DISCONNECTED"
-        self.node.get_logger().debug(f"[Twitch Healthcheck] Connection Status: {status}")
+
+        self.node.get_logger().debug(f"[Twitch Healthcheck] Alive: {is_actually_alive}")
+
         if not is_actually_alive:
+            self.node.get_logger().debug("[Twitch Healthcheck] Attempting to reconnect...")
             try:
+                # connect() is safe if run() is already running but connection dropped
                 await self.connect()
             except Exception as e:
                 self.node.get_logger().debug(f"[Twitch Healthcheck] Reconnect failed: {e}")
@@ -114,7 +122,8 @@ class Chatbot(commands.Bot):
         channel_name = self.node.get_parameter('channel').get_parameter_value().string_value
         channel = self.get_channel(channel_name)
         if channel:
-            asyncio.create_task(channel.send(msg.data))
+            # Using loop.create_task for thread safety if called from ROS callback
+            asyncio.run_coroutine_threadsafe(channel.send(msg.data), self.loop)
 
     def jsonfy(self, msg, header):
         stamp = float("%d.%09d" % (header.stamp.sec, header.stamp.nanosec))
@@ -141,8 +150,10 @@ class Chatbot(commands.Bot):
         self.pub_json.publish(self.jsonfy(msg, new_header))
 
     async def event_ready(self):
-        self.node.get_logger().info(f'Logged in as | {self.nick}')
-        self.publish("event_ready %d %s" % (self.user_id, self.nick))
+        if not self._is_ready:
+            self.node.get_logger().info(f'Logged in as | {self.nick}')
+            self.publish("event_ready %d %s" % (self.user_id, self.nick))
+            self._is_ready = True
 
     async def event_message(self, message):
         if message.echo:
@@ -168,8 +179,12 @@ class ChatbotNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    ChatbotNode()
-    rclpy.shutdown()
+    try:
+        ChatbotNode()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':
