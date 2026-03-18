@@ -133,7 +133,7 @@ ros2 run tioros filter --ros-args \
 | `black_filter` | string array | `['']` | Comma-separated list for blacklist rules. (Env: `TIOROS_BLACK_FILTER`) |
 | `white_list` | string | `""` | Path to YAML file with whitelist regex. (Env: `TIOROS_WHITE_LIST`) |
 | `black_list` | string | `""` | Path to YAML file with blacklist regex. (Env: `TIOROS_BLACK_LIST`) |
-| `substitute` | string array | `['']` | Pattern and replacement: `['pattern','replace']`. (Env: `TIOROS_SUBSTITUTE`) |
+| `substitute` | string array | `['']` | Regex pairs: `['pattern1','replace1','pattern2','replace2',...]`. Must be an even number of items. (Env: `TIOROS_SUBSTITUTE`) |
 
 ## Topics
 

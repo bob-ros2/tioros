@@ -8,6 +8,7 @@ Changelog for package tioros
 * Support parameters via environment variables
 * Clean up code to pass ROS 2 linters (flake8, pep257)
 * Add GitHub Actions ROS CI workflow
+* Support multiple regex pairs for filter substitute parameter
 * Update README and package metadata
 * Contributors: Bob Ros
 

@@ -49,7 +49,8 @@ class FilterNode(Node):
         self.declare_parameter('black_list', os.getenv('TIOROS_BLACK_LIST', ""),
                                ParameterDescriptor(description=desc_bl))
 
-        desc_sub = "Substitute regex for the string message. Expects array: ['pattern','replace']"
+        desc_sub = "Substitute regex pairs for the string message. Expects array: " \
+                   "['pattern1','replace1','pattern2','replace2',...]"
         def_sub = os.getenv('TIOROS_SUBSTITUTE', '').split(',') \
             if os.getenv('TIOROS_SUBSTITUTE') else ['']
         self.declare_parameter('substitute', def_sub, ParameterDescriptor(description=desc_sub))
@@ -59,6 +60,12 @@ class FilterNode(Node):
         self.white_list = self.get_parameter('white_list').value
         self.black_list = self.get_parameter('black_list').value
         self.substitute = self.get_parameter('substitute').value
+
+        if not self.check_substitute_pairs(self.substitute):
+            self.get_logger().error(
+                "Invalid 'substitute' parameter! Must be even number of items.")
+            # Abort: raising an exception here is effectively 'abbrechen'
+            raise ValueError("Invalid substitute pairs")
 
         if self.white_list:
             self.white_filter = self.load_yaml(self.white_list)
@@ -71,11 +78,23 @@ class FilterNode(Node):
 
         self.add_on_set_parameters_callback(self.parameter_callback)
 
+    def check_substitute_pairs(self, sub_list):
+        """Check if list has an even number of elements."""
+        if sub_list == [''] or len(sub_list) == 0:
+            return True
+        return len(sub_list) % 2 == 0
+
     def transform(self, s):
-        """Substitutes a string similar to python re.sub."""
-        if len(self.substitute) == 2:
-            return re.sub(self.substitute[0], self.substitute[1], s)
-        return s
+        """Substitutes string based on regex pairs."""
+        if self.substitute == [''] or len(self.substitute) < 2:
+            return s
+
+        result = s
+        for i in range(0, len(self.substitute), 2):
+            pattern = self.substitute[i]
+            replacement = self.substitute[i+1]
+            result = re.sub(pattern, replacement, result)
+        return result
 
     def chat_input_callback(self, msg: String):
         """Filter incoming message based on white and black lists."""
@@ -115,6 +134,9 @@ class FilterNode(Node):
             elif param.name == "black_filter":
                 self.black_filter = param.value
             elif param.name == "substitute":
+                if not self.check_substitute_pairs(param.value):
+                    self.get_logger().error("Failed to set 'substitute': Must be even pairs.")
+                    return SetParametersResult(successful=False, reason="Invalid substitute pairs")
                 self.substitute = param.value
             elif param.name == "black_list":
                 if self.black_list != param.value:
