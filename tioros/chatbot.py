@@ -21,7 +21,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Header
 from twitchio.ext import commands, routines
-from .auth import credentials_from_json_file
+from .auth import credentials_from_json_file, token_from_refresh_token
 
 
 class Chatbot(commands.Bot):
@@ -30,7 +30,6 @@ class Chatbot(commands.Bot):
         self.node = node
 
         # 1. Parameter: Direct token (highest priority)
-        # Allows setting the token directly via environment variable TIOROS_TOKEN
         self.node.declare_parameter('token', os.getenv('TIOROS_TOKEN', ''))
 
         # 2. Parameter: Credentials file path (fallback)
@@ -41,30 +40,33 @@ class Chatbot(commands.Bot):
         token = self.node.get_parameter('token').get_parameter_value().string_value
 
         if not token:
-            # Try loading from credentials file (Smart Load)
             path = self.node.get_parameter('credentials').get_parameter_value().string_value
             if os.path.exists(path):
-                # Try JSON first (consistency with auth.py and eventsub)
+                # Try to load as JSON first
                 data = credentials_from_json_file(path)
-                if data and 'access_token' in data:
-                    token = data['access_token']
+                if data:
+                    # Case A: Combined credentials JSON
+                    if 'access_token' in data:
+                        token = str(data['access_token']).strip()
+                    elif 'refresh_token' in data and 'client_id' in data:
+                        # Case B: Fetch token using refresh_token if available
+                        self.node.get_logger().info("Fetching token from refresh_token...")
+                        tdata = token_from_refresh_token(
+                            client_id=data['client_id'],
+                            client_secret=data.get('client_secret'),
+                            refresh_token=data['refresh_token'])
+                        if tdata and 'access_token' in tdata:
+                            token = tdata['access_token'].strip()
                 else:
-                    # Fallback: Read as plain text (legacy .secrets style)
+                    # Case C: It's not JSON, so treat it as plain text token file
                     with open(path, 'r') as f:
                         token = f.read().strip()
 
-        # Final safety strip to remove any hidden \n or \r from any source
-        if token:
-            token = token.strip()
+        if not token or "\n" in token or "\r" in token:
+            self.node.get_logger().error("Invalid or missing Twitch token! Aborting.")
+            raise ValueError("Twitch token contains forbidden characters or is empty.")
 
-        if not token:
-            self.node.get_logger().error(
-                "No Twitch token found! Set TIOROS_TOKEN or TIOROS_CREDENTIALS file."
-            )
-            # We don't exit here to allow standard ROS life cycle,
-            # but TwitchIO will likely fail on run()
-
-        # Channel & basic config
+        # Basic config
         default_channel = os.getenv('TIOROS_CHANNEL', 'superbob_6110')
         self.node.declare_parameter('channel', default_channel)
 
@@ -96,15 +98,11 @@ class Chatbot(commands.Bot):
         is_actually_alive = False
         if hasattr(self, '_connection') and self._connection:
             is_actually_alive = self._connection.is_alive
-
         status = "CONNECTED" if is_actually_alive else "DISCONNECTED"
         self.node.get_logger().debug(f"[Twitch Healthcheck] Connection Status: {status}")
-
         if not is_actually_alive:
-            self.node.get_logger().debug("[Twitch Healthcheck] Attempting to reconnect...")
             try:
                 await self.connect()
-                self.node.get_logger().debug("[Twitch Healthcheck] Reconnect initiated.")
             except Exception as e:
                 self.node.get_logger().debug(f"[Twitch Healthcheck] Reconnect failed: {e}")
 
@@ -113,15 +111,10 @@ class Chatbot(commands.Bot):
         rclpy.spin_once(node, timeout_sec=0.01)
 
     def chat_input(self, msg):
-        self.node.get_logger().info('chat_input: %s' % msg.data)
         channel_name = self.node.get_parameter('channel').get_parameter_value().string_value
         channel = self.get_channel(channel_name)
         if channel:
-            loop = asyncio.get_event_loop()
-            loop.create_task(channel.send(msg.data))
-
-    async def player_done(self):
-        self.node.get_logger().info('Finished playing sound')
+            asyncio.create_task(channel.send(msg.data))
 
     def jsonfy(self, msg, header):
         stamp = float("%d.%09d" % (header.stamp.sec, header.stamp.nanosec))
@@ -146,18 +139,10 @@ class Chatbot(commands.Bot):
         msg.data = text
         self.pub_chat.publish(msg)
         self.pub_json.publish(self.jsonfy(msg, new_header))
-        self.node.get_logger().debug(text)
 
     async def event_ready(self):
         self.node.get_logger().info(f'Logged in as | {self.nick}')
-        self.node.get_logger().info(f'User id is | {self.user_id}')
         self.publish("event_ready %d %s" % (self.user_id, self.nick))
-
-    async def event_reconnect(self):
-        self.node.get_logger().debug("TwitchIO event: Reconnect triggered")
-
-    async def event_error(self, error, data=None):
-        self.node.get_logger().debug(f"TwitchIO event: Error occurred: {error}")
 
     async def event_message(self, message):
         if message.echo:
@@ -169,24 +154,12 @@ class Chatbot(commands.Bot):
         self.publish(log_msg)
         await self.handle_commands(message)
 
-    async def event_join(self, channel, user):
-        userdata = await self.fetch_users([user.name])
-        self.publish("event_join %s %s" % (userdata[0].id, user.name))
-        await channel.send("Welcome @%s!" % user.name)
-
     @commands.command()
     async def hello(self, ctx: commands.Context):
-        userdata = await self.fetch_users([ctx.author.name])
-        self.publish("command %d %s hello" % (userdata[0].id, ctx.author.name))
         await ctx.send(f'Hello {ctx.author.name}!')
-
-    @commands.command()
-    async def play(self, ctx: commands.Context, *, search: str) -> None:
-        await ctx.send('Now playing')
 
 
 class ChatbotNode(Node):
-
     def __init__(self):
         super().__init__('chatbot')
         self.bot = Chatbot(self)

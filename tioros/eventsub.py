@@ -84,7 +84,7 @@ class Bot(commands.Bot):
 
         # init bot with scoped user token
         super().__init__(
-            token=tdata['access_token'].strip(),
+            token=tdata['access_token'],
             prefix='!',
             initial_channels=[self.node.get_parameter(
                 'channel').get_parameter_value().string_value])
