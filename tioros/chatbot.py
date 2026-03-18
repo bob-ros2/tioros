@@ -53,17 +53,21 @@ class Chatbot(commands.Bot):
                     with open(path, 'r') as f:
                         token = f.read().strip()
 
+        # Final safety strip to remove any hidden \n or \r from any source
+        if token:
+            token = token.strip()
+
         if not token:
             self.node.get_logger().error(
                 "No Twitch token found! Set TIOROS_TOKEN or TIOROS_CREDENTIALS file."
             )
-            # We don't exit here to allow standard ROS life cycle, 
+            # We don't exit here to allow standard ROS life cycle,
             # but TwitchIO will likely fail on run()
 
         # Channel & basic config
         default_channel = os.getenv('TIOROS_CHANNEL', 'superbob_6110')
         self.node.declare_parameter('channel', default_channel)
-        
+
         default_frame_id = os.getenv('TIOROS_FRAME_ID', self.node.get_parameter(
             'channel').get_parameter_value().string_value)
         self.node.declare_parameter('frame_id', default_frame_id)
