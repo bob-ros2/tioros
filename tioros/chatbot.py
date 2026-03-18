@@ -29,6 +29,8 @@ class Chatbot(commands.Bot):
     def __init__(self, node):
         self.node = node
         self._is_ready = False
+        self._client_id = None
+        self._client_secret = None
 
         # 1. Parameter: Direct token (highest priority)
         self.node.declare_parameter('token', os.getenv('TIOROS_TOKEN', ''))
@@ -43,23 +45,21 @@ class Chatbot(commands.Bot):
         if not token:
             path = self.node.get_parameter('credentials').get_parameter_value().string_value
             if os.path.exists(path):
-                # Try to load as JSON first
                 data = credentials_from_json_file(path)
                 if data:
-                    # Case A: Combined credentials JSON
+                    self._client_id = data.get('client_id')
+                    self._client_secret = data.get('client_secret')
                     if 'access_token' in data:
                         token = str(data['access_token']).strip()
-                    elif 'refresh_token' in data and 'client_id' in data:
-                        # Case B: Fetch token using refresh_token if available
+                    elif 'refresh_token' in data and self._client_id:
                         self.node.get_logger().info("Fetching token from refresh_token...")
                         tdata = token_from_refresh_token(
-                            client_id=data['client_id'],
-                            client_secret=data.get('client_secret'),
+                            client_id=self._client_id,
+                            client_secret=self._client_secret,
                             refresh_token=data['refresh_token'])
                         if tdata and 'access_token' in tdata:
                             token = tdata['access_token'].strip()
                 else:
-                    # Case C: It's not JSON, so treat it as plain text token file
                     with open(path, 'r') as f:
                         token = f.read().strip()
 
@@ -87,6 +87,8 @@ class Chatbot(commands.Bot):
 
         super().__init__(
             token=token,
+            client_id=self._client_id,
+            client_secret=self._client_secret,
             prefix=self.node.get_parameter('prefix').get_parameter_value().string_value,
             initial_channels=[self.node.get_parameter(
                 'channel').get_parameter_value().string_value])
@@ -96,7 +98,6 @@ class Chatbot(commands.Bot):
 
     @routines.routine(seconds=30.0)
     async def healthcheck(self):
-        # Skip healthcheck until the bot has initialized at least once
         if not self._is_ready:
             return
 
@@ -104,15 +105,12 @@ class Chatbot(commands.Bot):
         if hasattr(self, '_connection') and self._connection:
             is_actually_alive = self._connection.is_alive
 
-        self.node.get_logger().debug(f"[Twitch Healthcheck] Alive: {is_actually_alive}")
-
         if not is_actually_alive:
-            self.node.get_logger().debug("[Twitch Healthcheck] Attempting to reconnect...")
+            self.node.get_logger().warn("[Twitch Healthcheck] Connection lost. Reconnecting...")
             try:
-                # connect() is safe if run() is already running but connection dropped
                 await self.connect()
             except Exception as e:
-                self.node.get_logger().debug(f"[Twitch Healthcheck] Reconnect failed: {e}")
+                self.node.get_logger().error(f"[Twitch Healthcheck] Reconnect failed: {e}")
 
     @routines.routine(seconds=0.5)
     async def spin(self, node: Node):
@@ -122,7 +120,6 @@ class Chatbot(commands.Bot):
         channel_name = self.node.get_parameter('channel').get_parameter_value().string_value
         channel = self.get_channel(channel_name)
         if channel:
-            # Using loop.create_task for thread safety if called from ROS callback
             asyncio.run_coroutine_threadsafe(channel.send(msg.data), self.loop)
 
     def jsonfy(self, msg, header):
@@ -158,12 +155,17 @@ class Chatbot(commands.Bot):
     async def event_message(self, message):
         if message.echo:
             return
-        userdata = await self.fetch_users([message.author.name])
-        log_msg = "event_message %d %s %s" % (
-            userdata[0].id, message.author.name, message.content
-        )
-        self.publish(log_msg)
-        await self.handle_commands(message)
+
+        try:
+            userdata = await self.fetch_users([message.author.name])
+            user_id = userdata[0].id if userdata else 0
+            log_msg = "event_message %d %s %s" % (
+                user_id, message.author.name, message.content
+            )
+            self.publish(log_msg)
+            await self.handle_commands(message)
+        except Exception as e:
+            self.node.get_logger().error(f"Error handling event_message: {e}")
 
     @commands.command()
     async def hello(self, ctx: commands.Context):
