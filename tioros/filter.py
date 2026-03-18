@@ -64,7 +64,7 @@ class FilterNode(Node):
         if not self.check_substitute_pairs(self.substitute):
             self.get_logger().error(
                 "Invalid 'substitute' parameter! Must be even number of items.")
-            # Abort: raising an exception here is effectively 'abbrechen'
+            # Abort: raising an exception
             raise ValueError("Invalid substitute pairs")
 
         if self.white_list:
