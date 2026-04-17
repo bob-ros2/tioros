@@ -67,7 +67,7 @@ ros2 run tioros chatbot --ros-args -p channel:=myTwitchTv
 The following received Twitch events are published as `std_msgs/String` messages.
 
 * **event_ready**: `event_ready %user_id %nick`
-* **event_join**: `event_join %user_id %user_name`
+* **event_join**: `event_join 0 %user_name` (Note: User ID 0 is used to avoid Twitch API rate-limiting during high traffic)
 * **event_message**: `event_message %user_id %author_name %message_content`
 
 ## Node Parameters

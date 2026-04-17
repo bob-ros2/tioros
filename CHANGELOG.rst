@@ -6,9 +6,9 @@ Changelog for package tioros
 ------------------
 * Add TwitchIO connection health check and reconnect logic
 * Support parameters via environment variables
-* Clean up code to pass ROS 2 linters (flake8, pep257)
 * Add GitHub Actions ROS CI workflow
 * Support multiple regex pairs for filter substitute parameter
+* Reimplement event_join
 * Update README and package metadata
 * Contributors: Bob Ros
 
