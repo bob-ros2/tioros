@@ -184,7 +184,7 @@ class Chatbot(commands.Bot):
             return
         try:
             # Using ID 0 to avoid Twitch API Rate-Limits
-            log_msg = 'event_join 0 %s join' % (user.name)
+            log_msg = 'event_join 0 %s' % (user.name)
             self.publish(log_msg)
         except Exception as e:
             self.node.get_logger().error(f'Error handling event_join: {e}')
