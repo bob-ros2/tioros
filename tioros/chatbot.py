@@ -178,7 +178,7 @@ class Chatbot(commands.Bot):
             self.publish('event_ready %d %s' % (self.user_id, self.nick))
             self._is_ready = True
 
-    async def event_join(self, user):
+    async def event_join(self, channel, user):
         """Handle user join events."""
         if user.name.lower() == self.nick.lower():
             return
