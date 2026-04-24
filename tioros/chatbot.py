@@ -57,6 +57,8 @@ class Chatbot(commands.Bot):
             if os.path.exists(path):
                 data = credentials_from_json_file(path)
                 if data:
+                    self._creds_data = data
+                    self._creds_path = path
                     self._client_id = data.get('client_id')
                     self._client_secret = data.get('client_secret')
                     if 'access_token' in data:
@@ -70,9 +72,13 @@ class Chatbot(commands.Bot):
                             refresh_token=data['refresh_token'])
                         if tdata and 'access_token' in tdata:
                             token = tdata['access_token'].strip()
+                            # Update creds_data with new token for consistency
+                            self._creds_data['access_token'] = token
                 else:
                     with open(path, 'r') as f:
                         token = f.read().strip()
+                        self._creds_data = None
+                        self._creds_path = path
 
         if not token or '\n' in token or '\r' in token:
             self.node.get_logger().error(
@@ -113,7 +119,7 @@ class Chatbot(commands.Bot):
         self.spin.start(self.node)
         self.healthcheck.start()
 
-    @routines.routine(seconds=30.0)
+    @routines.routine(seconds=60.0)
     async def healthcheck(self):
         """Perform a periodic healthcheck to ensure the connection is alive."""
         if not self._is_ready:
@@ -125,12 +131,32 @@ class Chatbot(commands.Bot):
 
         if not is_actually_alive:
             self.node.get_logger().warn(
-                '[Twitch Healthcheck] Connection lost. Reconnecting...')
-            try:
-                await self.connect()
-            except Exception as e:
-                self.node.get_logger().error(
-                    f'[Twitch Healthcheck] Reconnect failed: {e}')
+                '[Twitch Healthcheck] Connection lost. Checking/Refreshing token...')
+            
+            # If we have refresh credentials, try to refresh the token
+            # This helps if the disconnection was caused by token expiration
+            if hasattr(self, '_creds_data') and self._creds_data and \
+               self._creds_data.get('refresh_token') and self._client_id:
+                try:
+                    self.node.get_logger().info('[Twitch Healthcheck] Attempting token refresh...')
+                    tdata = token_from_refresh_token(
+                        client_id=self._client_id,
+                        client_secret=self._client_secret,
+                        refresh_token=self._creds_data['refresh_token'])
+                    
+                    if tdata and 'access_token' in tdata:
+                        new_token = tdata['access_token'].strip()
+                        self._token = new_token
+                        if hasattr(self, '_http'):
+                            self._http.token = new_token
+                        self._creds_data['access_token'] = new_token
+                        self.node.get_logger().info('[Twitch Healthcheck] Token refreshed successfully.')
+                except Exception as e:
+                    self.node.get_logger().error(f'[Twitch Healthcheck] Token refresh failed: {e}')
+
+            # Do NOT call self.connect() manually. 
+            # twitchio's internal loop handles reconnection automatically.
+            # Calling it here causes "Concurrent call to receive() is not allowed".
 
     @routines.routine(seconds=0.5)
     async def spin(self, node: Node):
@@ -177,6 +203,12 @@ class Chatbot(commands.Bot):
             self.node.get_logger().info(f'Logged in as | {self.nick}')
             self.publish('event_ready %d %s' % (self.user_id, self.nick))
             self._is_ready = True
+
+    async def event_error(self, error, data=None):
+        """Handle errors occurring in the bot."""
+        self.node.get_logger().error(f'[Twitch] Error: {error}')
+        if data:
+            self.node.get_logger().error(f'[Twitch] Error data: {data}')
 
     async def event_join(self, channel, user):
         """Handle user join events."""
