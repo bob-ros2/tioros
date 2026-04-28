@@ -49,9 +49,9 @@ There are two primary ways to authenticate with Twitch, depending on the node yo
      ```
    * **Usage**: Required for rich events (follows, raids).
 
-# ROS Node: chatbot
+## ROS Node: chatbot
 
-## Usage
+### Usage
 
 ```bash
 # Set token directly via environment variable
@@ -63,14 +63,14 @@ export TIOROS_CREDENTIALS=~/.credentials
 ros2 run tioros chatbot --ros-args -p channel:=myTwitchTv
 ```
 
-## Supported TwitchIO Events
+### Supported TwitchIO Events
 The following received Twitch events are published as `std_msgs/String` messages.
 
 * **event_ready**: `event_ready %user_id %nick`
 * **event_join**: `event_join 0 %user_name` (Note: User ID 0 is used to avoid Twitch API rate-limiting during high traffic)
 * **event_message**: `event_message %user_id %author_name %message_content`
 
-## Node Parameters
+### Node Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -80,17 +80,17 @@ The following received Twitch events are published as `std_msgs/String` messages
 | `frame_id`| string | `channel` | Frame ID for published messages. (Env: `TIOROS_FRAME_ID`) |
 | `prefix`  | string | `!` | Command prefix for the bot. (Env: `TIOROS_PREFIX`) |
 
-## Topics
+### Topics
 
 * **Subscribed**: `chat_input` ([std_msgs/String](https://docs.ros2.org/latest/api/std_msgs/msg/String.html)) - Messages to send to Twitch.
 * **Published**: `chat` ([std_msgs/String](https://docs.ros2.org/latest/api/std_msgs/msg/String.html)) - Raw chat events.
 * **Published**: `json` ([std_msgs/String](https://docs.ros2.org/latest/api/std_msgs/msg/String.html)) - Structured event data.
 
-# ROS Node: eventsub
+## ROS Node: eventsub
 
 This node uses the [Twitch EventSub extension](https://twitchio.dev/en/stable/exts/eventsub.html) for rich event tracking (follows, raids, etc.).
 
-## Usage
+### Usage
 ```bash
 export TIOROS_CREDENTIALS=~/.credentials
 ros2 run tioros eventsub --ros-args \
@@ -98,7 +98,7 @@ ros2 run tioros eventsub --ros-args \
   -p broadcaster_id:="'123456'"
 ```
 
-## Node Parameters
+### Node Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -110,14 +110,14 @@ ros2 run tioros eventsub --ros-args \
 | `events_only` | bool | `false` | If true, disables automated "Thank you" messages in chat. (Env: `TIOROS_EVENTS_ONLY`) |
 | `frame_id` | string | `channel` | Frame ID for message headers. (Env: `TIOROS_FRAME_ID`) |
 
-## Topics
+### Topics
 
 * **Published**: `eventsub` ([std_msgs/String](https://docs.ros2.org/latest/api/std_msgs/msg/String.html)) - Human-readable event string.
 * **Published**: `json` ([std_msgs/String](https://docs.ros2.org/latest/api/std_msgs/msg/String.html)) - Structured event data.
 
-# ROS Node: filter
+## ROS Node: filter
 
-## Usage
+### Usage
 ```bash
 # Use a whitelist and regex substitution
 ros2 run tioros filter --ros-args \
@@ -125,7 +125,7 @@ ros2 run tioros filter --ros-args \
   -p "substitute:=['^[^ ]+ [^ ]+ ([^ ]+) (.*)', '\\1: \\2']"
 ```
 
-## Node Parameters
+### Node Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -135,17 +135,17 @@ ros2 run tioros filter --ros-args \
 | `black_list` | string | `""` | Path to YAML file with blacklist regex. (Env: `TIOROS_BLACK_LIST`) |
 | `substitute` | string array | `['']` | Regex pairs: `['pattern1','replace1','pattern2','replace2',...]`. Must be an even number of items. (Env: `TIOROS_SUBSTITUTE`) |
 
-## Topics
+### Topics
 
 * **Subscribed**: `chat` ([std_msgs/String](https://docs.ros2.org/latest/api/std_msgs/msg/String.html)) - Incoming chat messages.
 * **Published**: `chat_filtered` ([std_msgs/String](https://docs.ros2.org/latest/api/std_msgs/msg/String.html)) - Messages passing filters.
 * **Published**: `rejected` ([std_msgs/String](https://docs.ros2.org/latest/api/std_msgs/msg/String.html)) - Blocked messages.
 
-# Tool: AUTH
+## Tool: AUTH
 
 Simple Twitch authentication and token management.
 
-## Usage
+### Usage
 
 ```bash
 # Help output
@@ -154,8 +154,3 @@ ros2 run tioros auth -h
 # Generate token from refresh token
 ros2 run tioros auth -f ~/.credentials -r YOUR_REFRESH_TOKEN
 ```
-
-# Contributing
-
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-Check the [CONTRIBUTING.md](CONTRIBUTING.md) for licensing details.
