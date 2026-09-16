@@ -19,6 +19,7 @@
 import asyncio
 import json
 import os
+import time
 
 import rclpy
 from rclpy.node import Node
@@ -27,7 +28,12 @@ from std_msgs.msg import Header, String
 
 from twitchio.ext import commands, routines
 
-from .auth import credentials_from_json_file, token_from_refresh_token
+from .auth import (
+    credentials_from_json_file,
+    save_credentials_to_json_file,
+    token_from_refresh_token,
+    validate_token,
+)
 
 
 class Chatbot(commands.Bot):
@@ -39,6 +45,10 @@ class Chatbot(commands.Bot):
         self._is_ready = False
         self._client_id = None
         self._client_secret = None
+        self._creds_data = None
+        self._creds_path = None
+        self._token_expires_at = 0.0
+        self._last_connect_attempt = 0.0
 
         # 1. Parameter: Direct token (highest priority)
         self.node.declare_parameter('token', os.getenv('TIOROS_TOKEN', ''))
@@ -65,22 +75,55 @@ class Chatbot(commands.Bot):
                         token = str(data['access_token']).strip()
                     elif 'refresh_token' in data and self._client_id:
                         self.node.get_logger().info(
-                            'Fetching token from refresh_token...')
+                            'Fetching initial token from refresh_token...')
                         tdata = token_from_refresh_token(
                             client_id=self._client_id,
                             client_secret=self._client_secret,
                             refresh_token=data['refresh_token'])
                         if tdata and 'access_token' in tdata:
                             token = tdata['access_token'].strip()
-                            # Update creds_data with new token for consistency
+                            expires_in = tdata.get('expires_in', 14400)
+                            self._token_expires_at = time.time() + expires_in
                             self._creds_data['access_token'] = token
+                            if 'refresh_token' in tdata:
+                                self._creds_data['refresh_token'] = (
+                                    tdata['refresh_token'])
+                            save_credentials_to_json_file(
+                                self._creds_data, self._creds_path)
                 else:
                     with open(path, 'r') as f:
                         token = f.read().strip()
                         self._creds_data = None
                         self._creds_path = path
 
-        if not token or '\n' in token or '\r' in token:
+        # Validate initial token if we loaded an existing access_token
+        if token and not self._token_expires_at:
+            valid, vdata = validate_token(token)
+            if valid:
+                expires_in = vdata.get('expires_in', 14400)
+                self._token_expires_at = time.time() + expires_in
+                self.node.get_logger().info(
+                    f'Initial token valid. Expires in ~{expires_in}s.')
+            elif self._creds_data and self._creds_data.get('refresh_token'):
+                self.node.get_logger().warn(
+                    f'Initial token invalid ({vdata}). Refreshing...')
+                tdata = token_from_refresh_token(
+                    client_id=self._client_id,
+                    client_secret=self._client_secret,
+                    refresh_token=self._creds_data['refresh_token'])
+                if tdata and 'access_token' in tdata:
+                    token = tdata['access_token'].strip()
+                    expires_in = tdata.get('expires_in', 14400)
+                    self._token_expires_at = time.time() + expires_in
+                    self._creds_data['access_token'] = token
+                    if 'refresh_token' in tdata:
+                        self._creds_data['refresh_token'] = (
+                            tdata['refresh_token'])
+                    save_credentials_to_json_file(
+                        self._creds_data, self._creds_path)
+
+        clean_token = token.replace('oauth:', '').strip() if token else ''
+        if not clean_token or '\n' in clean_token or '\r' in clean_token:
             self.node.get_logger().error(
                 'Invalid or missing Twitch token! Aborting.')
             raise ValueError(
@@ -107,56 +150,188 @@ class Chatbot(commands.Bot):
         self.sub_chat_input = self.node.create_subscription(
             String, 'chat_input', self.chat_input, 10)
 
+        channel_to_join = self.node.get_parameter(
+            'channel').get_parameter_value().string_value
+
         super().__init__(
-            token=token,
+            token=clean_token,
             client_id=self._client_id,
             client_secret=self._client_secret,
             prefix=self.node.get_parameter(
                 'prefix').get_parameter_value().string_value,
-            initial_channels=[self.node.get_parameter(
-                'channel').get_parameter_value().string_value])
+            initial_channels=[channel_to_join])
+
+        # Hook TwitchIO WebSocket connection to ensure safe reconnects
+        if hasattr(self, '_connection') and self._connection:
+            self._orig_ws_connect = self._connection._connect
+            self._connection._connect = self._safe_ws_connect
+
+        initial_ttl = max(int(self._token_expires_at - time.time()), 300) \
+            if self._token_expires_at else 14400
+        self._apply_new_token(clean_token, expires_in=initial_ttl)
 
         self.spin.start(self.node)
         self.healthcheck.start()
 
+    def _apply_new_token(
+        self,
+        new_token: str,
+        expires_in: int = 14400,
+        new_refresh_token: str = None
+    ):
+        """Synchronize the new token across all internal components."""
+        clean_token = new_token.replace('oauth:', '').strip()
+        self._token = clean_token
+
+        # Update TwitchIO HTTP client
+        if hasattr(self, '_http') and self._http:
+            self._http.token = clean_token
+            self._http.app_token = clean_token
+
+        # Update TwitchIO WebSocket / IRC connection
+        if hasattr(self, '_connection') and self._connection:
+            self._connection._token = clean_token
+
+        self._token_expires_at = time.time() + max(int(expires_in), 300)
+
+        if hasattr(self, '_creds_data') and self._creds_data:
+            self._creds_data['access_token'] = clean_token
+            if new_refresh_token:
+                self._creds_data['refresh_token'] = new_refresh_token
+            if hasattr(self, '_creds_path') and self._creds_path:
+                save_credentials_to_json_file(
+                    self._creds_data, self._creds_path)
+
+    async def refresh_access_token(self):
+        """Fetch a fresh access token using the stored refresh token."""
+        if not hasattr(self, '_creds_data') or not self._creds_data:
+            self.node.get_logger().error(
+                '[Twitch Token] Cannot refresh: no credentials data loaded.')
+            return None
+
+        refresh_token = self._creds_data.get('refresh_token')
+        if not refresh_token or not self._client_id:
+            self.node.get_logger().error(
+                '[Twitch Token] Cannot refresh: missing refresh_token.')
+            return None
+
+        self.node.get_logger().info(
+            '[Twitch Token] Refreshing access token from Twitch...')
+        try:
+            tdata = await self.loop.run_in_executor(
+                None,
+                token_from_refresh_token,
+                self._client_id,
+                self._client_secret,
+                refresh_token)
+
+            if tdata and 'access_token' in tdata:
+                new_token = tdata['access_token'].strip()
+                expires_in = tdata.get('expires_in', 14400)
+                new_refresh = tdata.get('refresh_token')
+                self._apply_new_token(
+                    new_token=new_token,
+                    expires_in=expires_in,
+                    new_refresh_token=new_refresh)
+                self.node.get_logger().info(
+                    f'[Twitch Token] Token refreshed! Expires in '
+                    f'~{expires_in}s.')
+                return new_token
+            self.node.get_logger().error(
+                f'[Twitch Token] Refresh failed with response: {tdata}')
+            return None
+        except Exception as e:
+            self.node.get_logger().error(
+                f'[Twitch Token] Exception during refresh: {e}')
+            return None
+
+    async def event_token_expired(self):
+        """Handle event when OAuth token expires (TwitchIO HTTP hook)."""
+        self.node.get_logger().warn(
+            '[Twitch HTTP] Access token expired. Refreshing...')
+        new_token = await self.refresh_access_token()
+        return new_token
+
+    async def event_raw_data(self, data):
+        """Intercept raw data to detect authentication failure notices."""
+        if 'NOTICE * :Login authentication failed' in data or \
+           'NOTICE * :Login unsuccessful' in data:
+            self.node.get_logger().error(
+                '[Twitch IRC] Auth failure detected in IRC stream!')
+            self._token_expires_at = 0.0
+            await self.refresh_access_token()
+
+    async def _safe_ws_connect(self):
+        """Throttle and wrap TwitchIO _connect to refresh tokens if needed."""
+        # 1. Throttle rapid reconnect attempts
+        now = time.time()
+        elapsed = now - self._last_connect_attempt
+        if elapsed < 3.0:
+            delay = 3.0 - elapsed
+            self.node.get_logger().info(
+                f'[Twitch Reconnect] Throttling reconnect, '
+                f'waiting {delay:.1f}s')
+            await asyncio.sleep(delay)
+        self._last_connect_attempt = time.time()
+
+        # 2. Check token freshness before connecting
+        if hasattr(self, '_token_expires_at') and self._token_expires_at:
+            if time.time() >= self._token_expires_at - 600:
+                self.node.get_logger().info(
+                    '[Twitch Reconnect] Token near expiry. '
+                    'Refreshing first...')
+                await self.refresh_access_token()
+
+        # 3. Guard initial_channels against #TWITCHIOFAILURE removal
+        target_channel = self.node.get_parameter(
+            'channel').get_parameter_value().string_value
+        if hasattr(self, '_connection') and self._connection:
+            if not self._connection._initial_channels:
+                self._connection._initial_channels = [target_channel]
+
+        return await self._orig_ws_connect()
+
     @routines.routine(seconds=60.0)
     async def healthcheck(self):
-        """Perform a periodic healthcheck to ensure the connection is alive."""
+        """Perform periodic healthcheck and proactive token renewal."""
+        # 1. Proactive Token Refresh (10 minutes before expiration)
+        if hasattr(self, '_token_expires_at') and self._token_expires_at:
+            if time.time() >= self._token_expires_at - 600:
+                self.node.get_logger().info(
+                    '[Twitch Healthcheck] Proactive refresh '
+                    'triggered (near expiry)...')
+                await self.refresh_access_token()
+
         if not self._is_ready:
             return
 
-        is_actually_alive = False
+        # 2. Connection State Check
+        is_ready = False
+        is_alive = False
         if hasattr(self, '_connection') and self._connection:
-            is_actually_alive = self._connection.is_alive
+            is_ready = self._connection.is_ready.is_set()
+            is_alive = self._connection.is_alive
 
-        if not is_actually_alive:
+        if not is_ready or not is_alive:
             self.node.get_logger().warn(
-                '[Twitch Healthcheck] Connection lost. Checking/Refreshing token...')
-            
-            # If we have refresh credentials, try to refresh the token
-            # This helps if the disconnection was caused by token expiration
-            if hasattr(self, '_creds_data') and self._creds_data and \
-               self._creds_data.get('refresh_token') and self._client_id:
-                try:
-                    self.node.get_logger().info('[Twitch Healthcheck] Attempting token refresh...')
-                    tdata = token_from_refresh_token(
-                        client_id=self._client_id,
-                        client_secret=self._client_secret,
-                        refresh_token=self._creds_data['refresh_token'])
-                    
-                    if tdata and 'access_token' in tdata:
-                        new_token = tdata['access_token'].strip()
-                        self._token = new_token
-                        if hasattr(self, '_http'):
-                            self._http.token = new_token
-                        self._creds_data['access_token'] = new_token
-                        self.node.get_logger().info('[Twitch Healthcheck] Token refreshed successfully.')
-                except Exception as e:
-                    self.node.get_logger().error(f'[Twitch Healthcheck] Token refresh failed: {e}')
+                f'[Twitch Healthcheck] Connection degraded '
+                f'(alive={is_alive}, ready={is_ready}). Validating token...')
 
-            # Do NOT call self.connect() manually. 
-            # twitchio's internal loop handles reconnection automatically.
-            # Calling it here causes "Concurrent call to receive() is not allowed".
+            valid, vdata = await self.loop.run_in_executor(
+                None, validate_token, self._token)
+            if not valid:
+                self.node.get_logger().warn(
+                    f'[Twitch Healthcheck] Token invalid ({vdata}). '
+                    'Refreshing...')
+                await self.refresh_access_token()
+            elif isinstance(vdata, dict) and vdata.get('expires_in'):
+                self._token_expires_at = time.time() + vdata['expires_in']
+
+            target_channel = self.node.get_parameter(
+                'channel').get_parameter_value().string_value
+            if hasattr(self, '_connection') and self._connection:
+                if not self._connection._initial_channels:
+                    self._connection._initial_channels = [target_channel]
 
     @routines.routine(seconds=0.5)
     async def spin(self, node: Node):
@@ -199,16 +374,20 @@ class Chatbot(commands.Bot):
 
     async def event_ready(self):
         """Handle the event when the bot is logged in and ready."""
-        if not self._is_ready:
-            self.node.get_logger().info(f'Logged in as | {self.nick}')
-            self.publish('event_ready %d %s' % (self.user_id, self.nick))
-            self._is_ready = True
+        self.node.get_logger().info(f'Logged in as | {self.nick}')
+        self.publish('event_ready %d %s' % (self.user_id, self.nick))
+        self._is_ready = True
 
     async def event_error(self, error, data=None):
         """Handle errors occurring in the bot."""
         self.node.get_logger().error(f'[Twitch] Error: {error}')
         if data:
             self.node.get_logger().error(f'[Twitch] Error data: {data}')
+        err_str = str(error).lower()
+        if 'unauthorized' in err_str or 'authentication' in err_str:
+            self.node.get_logger().warn(
+                '[Twitch] Auth error detected. Refreshing token...')
+            await self.refresh_access_token()
 
     async def event_join(self, channel, user):
         """Handle user join events."""
@@ -223,7 +402,9 @@ class Chatbot(commands.Bot):
 
     async def event_message(self, message):
         """Handle incoming Twitch chat messages."""
-        if message.echo:
+        if message.echo and not os.getenv(
+            'TIOROS_ALLOW_SELF', '1'
+        ).lower() in ('1', 'true', 'yes'):
             return
 
         try:

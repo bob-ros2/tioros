@@ -14,6 +14,8 @@
 # limitations under the License.
 #
 
+"""Authentication and token management helpers for Twitch."""
+
 import argparse
 import json
 import logging
@@ -29,8 +31,8 @@ import requests
 
 # allow request redirects
 request_allow_redirects = False
-# verifies SSL certificates if set to /path/to/certfile
-request_verify = False
+# verifies SSL certificates if set to /path/to/certfile or True
+request_verify = True
 
 
 def do_post(
@@ -40,7 +42,7 @@ def do_post(
     redirect_uri=None,
     refresh_token=None,
     code=None,
-    auth_server_url="https://id.twitch.tv/oauth2/token",
+    auth_server_url='https://id.twitch.tv/oauth2/token',
     allow_redirects=request_allow_redirects,
     verify=request_verify
 ):
@@ -75,8 +77,8 @@ def do_post(
 
     if response.status_code != 200:
         logging.error(
-            "Failed to obtain token from the OAuth2 server: "
-            + str(response))
+            'Failed to obtain token from the OAuth2 server: '
+            + str(response.text))
         return None
 
     return json.loads(response.text)
@@ -108,6 +110,37 @@ def token_from_refresh_token(client_id, client_secret, refresh_token):
         grant_type='refresh_token')
 
 
+def validate_token(
+    access_token,
+    validate_url='https://id.twitch.tv/oauth2/validate',
+    verify=request_verify
+):
+    """
+    Validate an OAuth token with Twitch servers.
+
+    Returns a tuple of (is_valid: bool, data: dict).
+    """
+    if not access_token:
+        return False, {'error': 'missing_token'}
+
+    clean_token = access_token.replace('oauth:', '').strip()
+    headers = {'Authorization': f'OAuth {clean_token}'}
+    try:
+        response = requests.get(
+            validate_url,
+            headers=headers,
+            verify=verify,
+            timeout=10.0)
+        if response.status_code == 200:
+            return True, response.json()
+        if response.text.startswith('{'):
+            return False, response.json()
+        return False, {'status_code': response.status_code}
+    except Exception as e:
+        logging.error(f'validate_token request failed: {e}')
+        return False, {'error': str(e)}
+
+
 def credentials_from_json_file(path=None):
     """Load a file with JSON data into a Python Dict."""
     if not path:
@@ -117,14 +150,30 @@ def credentials_from_json_file(path=None):
         with open(path, 'r') as f:
             return json.load(f)
     except Exception as e:
-        logging.error("credentials_from_json_file failed: " + str(e))
+        logging.error('credentials_from_json_file failed: ' + str(e))
 
     return None
 
 
+def save_credentials_to_json_file(data, path=None):
+    """Save credentials dictionary to a JSON file."""
+    if not path:
+        path = os.path.join(os.path.expanduser('~'), '.credentials')
+
+    try:
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=2)
+            f.write('\n')
+        return True
+    except Exception as e:
+        logging.warning(f'save_credentials_to_json_file failed: {e}')
+        return False
+
+
 def code_from_client_id(
     client_id,
-    scope='moderator:read:followers channel:read:subscriptions chat:edit chat:read',
+    scope='moderator:read:followers channel:read:subscriptions chat:edit '
+          'chat:read',
     state='d3ab8b439efe11e793ae92361f002633',
     redirect_uri='http://localhost:3000',
     auth_server_url='https://id.twitch.tv/oauth2/authorize'
@@ -158,27 +207,31 @@ def main():
         default='')
 
     parser.add_argument(
-        '-j', '--json', action="store_true",
+        '-j', '--json', action='store_true',
         help='dumps example credentials data')
 
     parser.add_argument('-i', '--id', help='client_id', default='')
     parser.add_argument('-s', '--secret', help='client_secret', default='')
     parser.add_argument('-r', '--refresh', help='refresh_token', default='')
     parser.add_argument('-c', '--code', help='authorization code', default='')
-    parser.add_argument('-t', '--state', help='state (CSRF protection)', default='')
-    parser.add_argument('-p', '--scopes', help='whitespace delimited scopes', default='')
-    parser.add_argument('-d', '--redirect', help='redirect_uri', default='http://localhost:3000')
+    parser.add_argument(
+        '-t', '--state', help='state (CSRF protection)', default='')
+    parser.add_argument(
+        '-p', '--scopes', help='whitespace delimited scopes', default='')
+    parser.add_argument(
+        '-d', '--redirect', help='redirect_uri',
+        default='http://localhost:3000')
 
     parsed, _ = parser.parse_known_args()
 
     data = {
-        "client_id": parsed.id,
-        "client_secret": parsed.secret,
-        "refresh_token": parsed.refresh,
-        "code": parsed.code,
-        "scopes": parsed.scopes,
-        "redirect_uri": parsed.redirect,
-        "state": id_generator()
+        'client_id': parsed.id,
+        'client_secret': parsed.secret,
+        'refresh_token': parsed.refresh,
+        'code': parsed.code,
+        'scopes': parsed.scopes,
+        'redirect_uri': parsed.redirect,
+        'state': id_generator()
     }
 
     if parsed.credentials:
@@ -187,8 +240,9 @@ def main():
             data.update(d)
 
     if parsed.json:
-        print("Find below example credentials JSON data.\n"
-              "Leave the entries empty which you don't need.", file=sys.stderr)
+        print('Find below example credentials JSON data.\n'
+              "Leave the entries empty which you don't need.",
+              file=sys.stderr)
         print(json.dumps(data))
         parser.exit(0)
 
@@ -221,7 +275,8 @@ def main():
             scope=data['scopes'],
             state='d3ab8b439efe11e793ae92361f002633',
             redirect_uri=data['redirect_uri'])
-        print("Use below url in a browser to retrieve the authorization code", file=sys.stderr)
+        print('Use below url in a browser to retrieve the authorization code',
+              file=sys.stderr)
         print(redirect)
 
     elif data['client_id'] and data['client_secret']:
