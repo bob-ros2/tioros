@@ -471,16 +471,20 @@ class Chatbot(commands.Bot):
 
     async def event_message(self, message):
         """Handle incoming Twitch chat messages."""
+        author_name = message.author.name if message.author else self.nick
+        if not author_name:
+            return
+
         if message.echo and not os.getenv(
             'TIOROS_ALLOW_SELF', '1'
         ).lower() in ('1', 'true', 'yes'):
             return
 
         try:
-            userdata = await self.fetch_users([message.author.name])
+            userdata = await self.fetch_users([author_name])
             user_id = userdata[0].id if userdata else 0
             log_msg = 'event_message %d %s %s' % (
-                user_id, message.author.name, message.content
+                user_id, author_name, message.content
             )
             self.publish(log_msg)
             await self.handle_commands(message)
