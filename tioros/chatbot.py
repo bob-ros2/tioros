@@ -487,7 +487,8 @@ class Chatbot(commands.Bot):
                 user_id, author_name, message.content
             )
             self.publish(log_msg)
-            await self.handle_commands(message)
+            if not message.echo and message.author:
+                await self.handle_commands(message)
         except Exception as e:
             self.node.get_logger().error(f'Error handling event_message: {e}')
 
