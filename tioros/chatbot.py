@@ -20,6 +20,9 @@ import asyncio
 import json
 import os
 import time
+from functools import partial
+
+import aiohttp
 
 import rclpy
 from rclpy.node import Node
@@ -165,6 +168,7 @@ class Chatbot(commands.Bot):
         if hasattr(self, '_connection') and self._connection:
             self._orig_ws_connect = self._connection._connect
             self._connection._connect = self._safe_ws_connect
+            self._connection._keep_alive = self._safe_keep_alive
 
         initial_ttl = max(int(self._token_expires_at - time.time()), 300) \
             if self._token_expires_at else 14400
@@ -254,12 +258,59 @@ class Chatbot(commands.Bot):
 
     async def event_raw_data(self, data):
         """Intercept raw data to detect authentication failure notices."""
+        if not isinstance(data, str):
+            return
         if 'NOTICE * :Login authentication failed' in data or \
            'NOTICE * :Login unsuccessful' in data:
             self.node.get_logger().error(
                 '[Twitch IRC] Auth failure detected in IRC stream!')
             self._token_expires_at = 0.0
             await self.refresh_access_token()
+
+    async def _safe_keep_alive(self):
+        """Run robust keep-alive loop handling errors without crashing."""
+        ws_conn = self._connection
+        await ws_conn._ws_ready_event.wait()
+        ws_conn._ws_ready_event.clear()
+
+        if not ws_conn._last_ping:
+            ws_conn._last_ping = time.time()
+
+        while (ws_conn._websocket and not ws_conn._websocket.closed and
+               not ws_conn._reconnect_requested):
+            try:
+                msg = await ws_conn._websocket.receive()
+            except Exception as e:
+                self.node.get_logger().warn(
+                    f'[Twitch WS] Websocket receive exception: {e}')
+                break
+
+            if msg.type in (aiohttp.WSMsgType.CLOSED,
+                            aiohttp.WSMsgType.ERROR,
+                            aiohttp.WSMsgType.CLOSING):
+                self.node.get_logger().warn(
+                    f'[Twitch WS] Websocket closed/error (type={msg.type}): '
+                    f'{msg.extra}')
+                break
+
+            if msg.type == aiohttp.WSMsgType.TEXT:
+                data = msg.data
+                if data and isinstance(data, str):
+                    ws_conn.dispatch('raw_data', data)
+                    events = data.split('\r\n')
+                    for event in events:
+                        if not event:
+                            continue
+                        task = asyncio.create_task(
+                            ws_conn._process_data(event))
+                        task.add_done_callback(
+                            partial(ws_conn._task_callback, event))
+                        ws_conn._background_tasks.append(task)
+
+        self.node.get_logger().info(
+            '[Twitch WS] Keep-alive loop exited. Scheduling reconnect...')
+        ws_conn._background_tasks.append(
+            asyncio.create_task(ws_conn._connect()))
 
     async def _safe_ws_connect(self):
         """Throttle and wrap TwitchIO _connect to refresh tokens if needed."""
@@ -289,7 +340,14 @@ class Chatbot(commands.Bot):
             if not self._connection._initial_channels:
                 self._connection._initial_channels = [target_channel]
 
-        return await self._orig_ws_connect()
+        try:
+            return await self._orig_ws_connect()
+        except Exception as e:
+            self.node.get_logger().error(
+                f'[Twitch Reconnect] Connection error: {e}')
+            # Schedule another attempt after backoff
+            await asyncio.sleep(5.0)
+            return asyncio.create_task(self._safe_ws_connect())
 
     @routines.routine(seconds=60.0)
     async def healthcheck(self):
@@ -315,7 +373,7 @@ class Chatbot(commands.Bot):
         if not is_ready or not is_alive:
             self.node.get_logger().warn(
                 f'[Twitch Healthcheck] Connection degraded '
-                f'(alive={is_alive}, ready={is_ready}). Validating token...')
+                f'(alive={is_alive}, ready={is_ready}). Checking status...')
 
             valid, vdata = await self.loop.run_in_executor(
                 None, validate_token, self._token)
@@ -332,6 +390,17 @@ class Chatbot(commands.Bot):
             if hasattr(self, '_connection') and self._connection:
                 if not self._connection._initial_channels:
                     self._connection._initial_channels = [target_channel]
+
+                # Actively recover if connection is dead
+                if not is_alive:
+                    self.node.get_logger().info(
+                        '[Twitch Healthcheck] Actively triggering reconnect '
+                        'because socket is dead...')
+                    self._connection.is_ready.clear()
+                    if (self._connection._keeper and
+                            not self._connection._keeper.done()):
+                        self._connection._keeper.cancel()
+                    asyncio.create_task(self._connection._connect())
 
     @routines.routine(seconds=0.5)
     async def spin(self, node: Node):

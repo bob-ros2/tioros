@@ -165,6 +165,13 @@ def save_credentials_to_json_file(data, path=None):
             json.dump(data, f, indent=2)
             f.write('\n')
         return True
+    except OSError as e:
+        if getattr(e, 'errno', None) == 30:
+            logging.debug(
+                f'Credentials file is read-only ({path}), skipping save.')
+        else:
+            logging.warning(f'save_credentials_to_json_file failed: {e}')
+        return False
     except Exception as e:
         logging.warning(f'save_credentials_to_json_file failed: {e}')
         return False
